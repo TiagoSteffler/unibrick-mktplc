@@ -1,4 +1,19 @@
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+  updateDoc,
+  where,
+} from 'firebase/firestore'
+import { db, isFirebaseConfigured } from '../firebase/config'
+
 const EXTRA_PRODUCTS_KEY = 'marketplace_extra_products'
+const PRODUCTS_COLLECTION = 'products'
 
 const seedSellers = {
   'seller-1': {
@@ -42,6 +57,14 @@ function safeWrite(key, data) {
 function normalizeProduct(product) {
   return {
     ...product,
+    id: product.id,
+    title: product.title || 'Sem titulo',
+    description: product.description || '',
+    category: product.category || 'Geral',
+    sellerId: product.sellerId || '',
+    sellerName: product.sellerName || 'Vendedor',
+    sellerPhotoURL: product.sellerPhotoURL || '',
+    createdAt: product.createdAt || new Date().toISOString().slice(0, 10),
     price: Number(product.price || 0),
     condition: product.condition || 'usado',
     photos: Array.isArray(product.photos) ? product.photos.filter(Boolean) : [],
@@ -69,6 +92,68 @@ function sortProducts(products, sortBy) {
 function getAllProducts() {
   const extra = safeRead(EXTRA_PRODUCTS_KEY, [])
   return [...seedProducts, ...extra].map(normalizeProduct)
+}
+
+async function getAllProductsFirestore() {
+  if (!isFirebaseConfigured || !db) {
+    return getAllProducts()
+  }
+
+  const snapshot = await getDocs(collection(db, PRODUCTS_COLLECTION))
+
+  return snapshot.docs.map((item) => {
+    const data = item.data()
+    return normalizeProduct({
+      id: item.id,
+      ...data,
+    })
+  })
+}
+
+async function getProductByIdFirestore(productId) {
+  if (!isFirebaseConfigured || !db) {
+    return getAllProducts().find((item) => item.id === productId) || null
+  }
+
+  const snapshot = await getDoc(doc(db, PRODUCTS_COLLECTION, String(productId)))
+
+  if (!snapshot.exists()) {
+    return null
+  }
+
+  return normalizeProduct({
+    id: snapshot.id,
+    ...snapshot.data(),
+  })
+}
+
+async function getSellerPreviewById(sellerId) {
+  if (!isFirebaseConfigured || !db) {
+    return null
+  }
+
+  const sellerProductsQuery = query(
+    collection(db, PRODUCTS_COLLECTION),
+    where('sellerId', '==', sellerId),
+    limit(1),
+  )
+
+  const sellerSnapshot = await getDocs(sellerProductsQuery)
+
+  if (sellerSnapshot.empty) {
+    return null
+  }
+
+  const sample = sellerSnapshot.docs[0].data()
+
+  return {
+    id: sellerId,
+    name: sample.sellerName || 'Vendedor',
+    photoURL: sample.sellerPhotoURL || '',
+    city: 'Nao informado',
+    joinedAt: sample.createdAt || new Date().toISOString().slice(0, 10),
+    about: 'Perfil publico baseado nos anuncios do vendedor.',
+  }
 }
 
 function buildFavoriteKey(userId) {
@@ -110,7 +195,7 @@ function sellerFromUser(user) {
 }
 
 export async function getAvailableCategories() {
-  const categories = [...new Set(getAllProducts().map((item) => item.category))]
+  const categories = [...new Set((await getAllProductsFirestore()).map((item) => item.category))]
   return categories.sort((a, b) => a.localeCompare(b))
 }
 
@@ -128,7 +213,7 @@ export async function searchProducts(filters = {}) {
   const max = maxPrice === '' ? Number.POSITIVE_INFINITY : Number(maxPrice)
   const term = query.trim().toLowerCase()
 
-  const filtered = getAllProducts().filter((product) => {
+  const filtered = (await getAllProductsFirestore()).filter((product) => {
     const matchName = term ? product.title.toLowerCase().includes(term) : true
     const matchCategory = category ? product.category === category : true
     const matchPrice = product.price >= min && product.price <= max
@@ -141,31 +226,65 @@ export async function searchProducts(filters = {}) {
 }
 
 export async function getFreeProducts(limit = 8) {
-  return getAllProducts()
+  return (await getAllProductsFirestore())
     .filter((item) => item.price === 0)
     .sort(compareByCreatedAtDesc)
     .slice(0, limit)
 }
 
 export async function getRecentProducts(limit = 8) {
-  return getAllProducts().sort(compareByCreatedAtDesc).slice(0, limit)
+  return (await getAllProductsFirestore()).sort(compareByCreatedAtDesc).slice(0, limit)
 }
 
 export async function getProductById(productId) {
-  return getAllProducts().find((item) => item.id === productId) || null
+  return getProductByIdFirestore(productId)
 }
 
 export async function getSellerById(sellerId) {
-  return seedSellers[sellerId] || null
+  return seedSellers[sellerId] || (await getSellerPreviewById(sellerId)) || null
 }
 
 export async function getSellerProducts(sellerId) {
-  return getAllProducts().filter((item) => item.sellerId === sellerId)
+  return (await getAllProductsFirestore()).filter((item) => item.sellerId === sellerId)
 }
 
 export async function createProduct(payload, user) {
   if (!user) {
     throw new Error('Usuario nao autenticado')
+  }
+
+  if (isFirebaseConfigured && db) {
+    const documentPayload = normalizeProduct({
+      id: undefined,
+      title: payload.title,
+      description: payload.description,
+      category: payload.category,
+      price: Number(payload.price),
+      photos: payload.photos,
+      condition: payload.condition || 'usado',
+      sellerId: user.uid,
+      sellerName: user.displayName || 'Vendedor',
+      sellerPhotoURL: user.photoURL || '',
+      createdAt: new Date().toISOString().slice(0, 10),
+    })
+
+    const created = await addDoc(collection(db, PRODUCTS_COLLECTION), {
+      title: documentPayload.title,
+      description: documentPayload.description,
+      category: documentPayload.category,
+      price: documentPayload.price,
+      photos: documentPayload.photos,
+      condition: documentPayload.condition,
+      sellerId: documentPayload.sellerId,
+      sellerName: documentPayload.sellerName,
+      sellerPhotoURL: documentPayload.sellerPhotoURL,
+      createdAt: documentPayload.createdAt,
+    })
+
+    return {
+      ...documentPayload,
+      id: created.id,
+    }
   }
 
   const extra = safeRead(EXTRA_PRODUCTS_KEY, [])
@@ -191,6 +310,49 @@ export async function createProduct(payload, user) {
 export async function updateProduct(productId, payload, user) {
   if (!user) {
     throw new Error('Usuario nao autenticado')
+  }
+
+  if (isFirebaseConfigured && db) {
+    const reference = doc(db, PRODUCTS_COLLECTION, String(productId))
+    const currentSnapshot = await getDoc(reference)
+
+    if (!currentSnapshot.exists()) {
+      throw new Error('Anuncio nao encontrado.')
+    }
+
+    const current = normalizeProduct({
+      id: currentSnapshot.id,
+      ...currentSnapshot.data(),
+    })
+
+    if (current.sellerId !== user.uid) {
+      throw new Error('Voce nao tem permissao para editar este anuncio.')
+    }
+
+    const updated = normalizeProduct({
+      ...current,
+      title: payload.title,
+      description: payload.description,
+      category: payload.category,
+      price: Number(payload.price),
+      photos: payload.photos,
+      condition: payload.condition || current.condition,
+      sellerName: user.displayName || current.sellerName,
+      sellerPhotoURL: user.photoURL || current.sellerPhotoURL,
+    })
+
+    await updateDoc(reference, {
+      title: updated.title,
+      description: updated.description,
+      category: updated.category,
+      price: updated.price,
+      photos: updated.photos,
+      condition: updated.condition,
+      sellerName: updated.sellerName,
+      sellerPhotoURL: updated.sellerPhotoURL,
+    })
+
+    return updated
   }
 
   const extra = safeRead(EXTRA_PRODUCTS_KEY, [])
@@ -227,6 +389,28 @@ export async function deleteProduct(productId, user) {
     throw new Error('Usuario nao autenticado')
   }
 
+  if (isFirebaseConfigured && db) {
+    const reference = doc(db, PRODUCTS_COLLECTION, String(productId))
+    const currentSnapshot = await getDoc(reference)
+
+    if (!currentSnapshot.exists()) {
+      throw new Error('Anuncio nao encontrado.')
+    }
+
+    const current = normalizeProduct({
+      id: currentSnapshot.id,
+      ...currentSnapshot.data(),
+    })
+
+    if (current.sellerId !== user.uid) {
+      throw new Error('Voce nao tem permissao para excluir este anuncio.')
+    }
+
+    await deleteDoc(reference)
+    removeProductFromAllFavorites(String(productId))
+    return
+  }
+
   const extra = safeRead(EXTRA_PRODUCTS_KEY, [])
   const index = extra.findIndex((item) => item.id === productId)
 
@@ -258,7 +442,7 @@ export async function getMyProducts(user) {
     return []
   }
 
-  return getAllProducts().filter((item) => item.sellerId === user.uid)
+  return (await getAllProductsFirestore()).filter((item) => item.sellerId === user.uid)
 }
 
 export async function getFavoriteProducts(user) {
@@ -267,7 +451,7 @@ export async function getFavoriteProducts(user) {
   }
 
   const favoriteIds = safeRead(buildFavoriteKey(user.uid), [])
-  return getAllProducts().filter((item) => favoriteIds.includes(item.id))
+  return (await getAllProductsFirestore()).filter((item) => favoriteIds.includes(item.id))
 }
 
 export async function isFavorite(user, productId) {
