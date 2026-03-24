@@ -4,7 +4,7 @@ Estrutura simplificada de marketplace para rodar em GitHub Pages com frontend em
 
 Este README foi escrito para quem nunca usou Firebase e quer configurar tudo no plano gratuito (Spark).
 
-## O que ja esta implementado
+## O que ja esta implementado <<<<
 
 - Busca de produtos por nome e filtros
 - Pagina de produto
