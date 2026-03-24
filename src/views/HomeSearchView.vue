@@ -61,34 +61,49 @@ watch(
       <p class="muted">Filtre por preco, categoria e outros criterios.</p>
 
       <form class="grid" style="margin-top: 14px" @submit.prevent="loadProducts">
-        <select v-model="filters.category">
-          <option value="">Todas categorias</option>
-          <option v-for="category in categories" :key="category" :value="category">
-            {{ category }}
-          </option>
+      <div>
+        <label class="filter-label">Categoria</label>
+        <select v-model="filters.category" class="dropdown">
+        <option value="">Todas categorias</option>
+        <option v-for="category in categories" :key="category" :value="category">
+          {{ category }}
+        </option>
         </select>
+      </div>
 
-        <div class="grid" style="grid-template-columns: 1fr 1fr">
-          <input v-model="filters.minPrice" type="number" min="0" step="0.01" placeholder="Preco min" />
-          <input v-model="filters.maxPrice" type="number" min="0" step="0.01" placeholder="Preco max" />
+      <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 8px">
+        <div>
+        <label class="filter-label">Preço mín.</label>
+        <input v-model="filters.minPrice" type="number" min="0" step="0.01" placeholder="Preço min" class="valueinput" />
         </div>
-
-        <select v-model="filters.condition">
-          <option value="">Estado (todos)</option>
-          <option value="novo">Novo</option>
-          <option value="usado">Usado</option>
-        </select>
-
-        <select v-model="filters.sortBy">
-          <option value="recent">Mais recentes</option>
-          <option value="priceAsc">Menor preco</option>
-          <option value="priceDesc">Maior preco</option>
-        </select>
-
-        <div style="display: flex; gap: 8px">
-          <button class="btn" type="submit">Aplicar</button>
-          <button class="btn secondary" type="button" @click="resetFilters">Limpar</button>
+        <div>
+        <label class="filter-label">Preço máx.</label>
+        <input v-model="filters.maxPrice" type="number" min="0" step="0.01" placeholder="Preço max" class="valueinput" />
         </div>
+      </div>
+
+      <div>
+        <label class="filter-label">Estado</label>
+        <select v-model="filters.condition" class="dropdown">
+        <option value="">Estado (todos)</option>
+        <option value="novo">Novo</option>
+        <option value="usado">Usado</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="filter-label">Ordenar por</label>
+        <select v-model="filters.sortBy" class="dropdown">
+        <option value="recent">Mais recentes</option>
+        <option value="priceAsc">Menor preço</option>
+        <option value="priceDesc">Maior preço</option>
+        </select>
+      </div>
+
+      <div style="display: flex; gap: 8px; padding-top: 8px">
+        <button class="btn" type="submit">Aplicar</button>
+        <button class="btn secondary" type="button" @click="resetFilters">Limpar</button>
+      </div>
       </form>
     </aside>
 

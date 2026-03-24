@@ -5,11 +5,13 @@ import ProductView from '../views/ProductView.vue'
 import SellerProfileView from '../views/SellerProfileView.vue'
 import LoginView from '../views/LoginView.vue'
 import MyProfileView from '../views/MyProfileView.vue'
+import ProfileSetupView from '../views/ProfileSetupView.vue'
 import ProductCreateView from '../views/ProductCreateView.vue'
 import ProductEditView from '../views/ProductEditView.vue'
 import MyProductsView from '../views/MyProductsView.vue'
 import FavoritesView from '../views/FavoritesView.vue'
 import { getCurrentUser, initAuth, waitForAuthInit } from '../services/authService'
+import { hasCompletedUserProfile } from '../services/marketplaceService'
 
 const routes = [
   { path: '/', name: 'home', component: HomeView },
@@ -21,6 +23,18 @@ const routes = [
     path: '/profile',
     name: 'profile',
     component: MyProfileView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/profile/setup',
+    name: 'profile-setup',
+    component: ProfileSetupView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/profile/edit',
+    name: 'profile-edit',
+    component: ProfileSetupView,
     meta: { requiresAuth: true },
   },
   {
@@ -65,11 +79,23 @@ router.beforeEach(async (to) => {
 
   await waitForAuthInit()
 
-  if (getCurrentUser()) {
-    return true
+  const user = getCurrentUser()
+
+  if (!user) {
+    return { name: 'login', query: { redirect: to.fullPath } }
   }
 
-  return { name: 'login', query: { redirect: to.fullPath } }
+  const hasProfile = hasCompletedUserProfile(user)
+
+  if (!hasProfile && to.name !== 'profile-setup') {
+    return { name: 'profile-setup', query: { redirect: to.fullPath } }
+  }
+
+  if (hasProfile && to.name === 'profile-setup') {
+    return { name: 'profile' }
+  }
+
+  return true
 })
 
 export default router

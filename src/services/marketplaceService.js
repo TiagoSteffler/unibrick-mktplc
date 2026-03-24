@@ -10,10 +10,14 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
-import { db, isFirebaseConfigured } from '../firebase/config'
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
+import { db, isFirebaseConfigured, storage } from '../firebase/config'
 
 const EXTRA_PRODUCTS_KEY = 'marketplace_extra_products'
+const USER_PROFILE_KEY = 'marketplace_user_profiles'
 const PRODUCTS_COLLECTION = 'products'
+const MIN_PRODUCT_PHOTOS = 1
+const MAX_PRODUCT_PHOTOS = 5
 
 const seedSellers = {
   'seller-1': {
@@ -69,6 +73,42 @@ function normalizeProduct(product) {
     condition: product.condition || 'usado',
     photos: Array.isArray(product.photos) ? product.photos.filter(Boolean) : [],
   }
+}
+
+function normalizePhotoList(photos) {
+  if (!Array.isArray(photos)) {
+    return []
+  }
+
+  return photos.map((item) => String(item || '').trim()).filter(Boolean).slice(0, MAX_PRODUCT_PHOTOS)
+}
+
+function validatePhotoCount(photos) {
+  if (photos.length < MIN_PRODUCT_PHOTOS) {
+    throw new Error('Inclua pelo menos uma foto do produto.')
+  }
+
+  if (photos.length > MAX_PRODUCT_PHOTOS) {
+    throw new Error(`Envie no maximo ${MAX_PRODUCT_PHOTOS} fotos por produto.`)
+  }
+}
+
+async function uploadPhotosToStorage(files, user) {
+  if (!storage) {
+    throw new Error('Storage do Firebase nao esta configurado.')
+  }
+
+  const now = Date.now()
+  const uploads = files.slice(0, MAX_PRODUCT_PHOTOS).map(async (file, index) => {
+    const extension = String(file.name || 'jpg').split('.').pop() || 'jpg'
+    const path = `products/${user.uid}/${now}-${index}.${extension}`
+    const storageRef = ref(storage, path)
+
+    await uploadBytes(storageRef, file)
+    return getDownloadURL(storageRef)
+  })
+
+  return Promise.all(uploads)
 }
 
 function compareByCreatedAtDesc(a, b) {
@@ -184,14 +224,104 @@ function removeProductFromAllFavorites(productId) {
 }
 
 function sellerFromUser(user) {
+  const registered = getUserProfile(user)
+
   return {
     id: user.uid,
-    name: user.displayName || 'Meu Perfil',
-    photoURL: user.photoURL || '',
-    city: 'Nao informado',
+    name: registered?.fullName || user.displayName || 'Meu Perfil',
+    photoURL: registered?.photoURL || user.photoURL || '',
+    city: registered?.neighborhood || 'Nao informado',
     joinedAt: new Date().toISOString().slice(0, 10),
-    about: 'Perfil criado com login de usuario.',
+    about: registered?.gender
+      ? `Perfil configurado no cadastro. Sexo: ${registered.gender}.`
+      : 'Perfil criado com login de usuario.',
+    email: user.email || '',
+    gender: registered?.gender || '',
+    neighborhood: registered?.neighborhood || '',
+    fullName: registered?.fullName || user.displayName || '',
   }
+}
+
+function getSuggestedName(user) {
+  if (!user) {
+    return ''
+  }
+
+  if (user.displayName && user.displayName.trim()) {
+    return user.displayName.trim()
+  }
+
+  const email = user.email || ''
+  const [prefix] = email.split('@')
+  return prefix || ''
+}
+
+function isProfileComplete(profile) {
+  if (!profile) {
+    return false
+  }
+
+  return Boolean(
+    String(profile.fullName || '').trim() &&
+      String(profile.gender || '').trim() &&
+      String(profile.neighborhood || '').trim() &&
+      String(profile.email || '').trim(),
+  )
+}
+
+function normalizeUserProfile(profile, user) {
+  const email = user?.email || ''
+
+  return {
+    fullName: String(profile?.fullName || getSuggestedName(user)).trim(),
+    gender: String(profile?.gender || '').trim(),
+    neighborhood: String(profile?.neighborhood || '').trim(),
+    photoURL: String(profile?.photoURL || user?.photoURL || '').trim(),
+    email,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+function readUserProfiles() {
+  return safeRead(USER_PROFILE_KEY, {})
+}
+
+function saveUserProfiles(profiles) {
+  safeWrite(USER_PROFILE_KEY, profiles)
+}
+
+export function getUserProfile(user) {
+  if (!user) {
+    return null
+  }
+
+  const profiles = readUserProfiles()
+  const stored = profiles[user.uid] || {}
+  return normalizeUserProfile(stored, user)
+}
+
+export function hasCompletedUserProfile(user) {
+  return isProfileComplete(getUserProfile(user))
+}
+
+export async function saveUserProfile(user, payload) {
+  if (!user) {
+    throw new Error('Usuario nao autenticado')
+  }
+
+  const profiles = readUserProfiles()
+  const current = profiles[user.uid] || {}
+  const merged = {
+    ...current,
+    ...payload,
+    email: user.email || '',
+  }
+
+  const normalized = normalizeUserProfile(merged, user)
+  profiles[user.uid] = normalized
+  saveUserProfiles(profiles)
+
+  return normalized
 }
 
 export async function getAvailableCategories() {
@@ -253,6 +383,15 @@ export async function createProduct(payload, user) {
     throw new Error('Usuario nao autenticado')
   }
 
+  const hasFiles = Array.isArray(payload.photoFiles) && payload.photoFiles.length > 0
+  let photos = normalizePhotoList(payload.photos)
+
+  if (isFirebaseConfigured && db && hasFiles) {
+    photos = await uploadPhotosToStorage(payload.photoFiles, user)
+  }
+
+  validatePhotoCount(photos)
+
   if (isFirebaseConfigured && db) {
     const documentPayload = normalizeProduct({
       id: undefined,
@@ -260,7 +399,7 @@ export async function createProduct(payload, user) {
       description: payload.description,
       category: payload.category,
       price: Number(payload.price),
-      photos: payload.photos,
+      photos,
       condition: payload.condition || 'usado',
       sellerId: user.uid,
       sellerName: user.displayName || 'Vendedor',
@@ -295,7 +434,7 @@ export async function createProduct(payload, user) {
     description: payload.description,
     category: payload.category,
     price: payload.price,
-    photos: payload.photos,
+    photos,
     condition: payload.condition || 'usado',
     sellerId: user.uid,
     createdAt: new Date().toISOString().slice(0, 10),
@@ -329,13 +468,16 @@ export async function updateProduct(productId, payload, user) {
       throw new Error('Voce nao tem permissao para editar este anuncio.')
     }
 
+    const nextPhotos = normalizePhotoList(payload.photos)
+    validatePhotoCount(nextPhotos)
+
     const updated = normalizeProduct({
       ...current,
       title: payload.title,
       description: payload.description,
       category: payload.category,
       price: Number(payload.price),
-      photos: payload.photos,
+      photos: nextPhotos,
       condition: payload.condition || current.condition,
       sellerName: user.displayName || current.sellerName,
       sellerPhotoURL: user.photoURL || current.sellerPhotoURL,
@@ -368,13 +510,16 @@ export async function updateProduct(productId, payload, user) {
     throw new Error('Voce nao tem permissao para editar este anuncio.')
   }
 
+  const nextPhotos = normalizePhotoList(payload.photos)
+  validatePhotoCount(nextPhotos)
+
   const updated = normalizeProduct({
     ...current,
     title: payload.title,
     description: payload.description,
     category: payload.category,
     price: Number(payload.price),
-    photos: payload.photos,
+    photos: nextPhotos,
     condition: payload.condition || current.condition,
   })
 

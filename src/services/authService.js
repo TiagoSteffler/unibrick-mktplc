@@ -116,3 +116,20 @@ export async function signOutUser() {
   authState.value = null
   saveMockUser(null)
 }
+
+export function updateAuthenticatedUserProfile(payload = {}) {
+  if (!authState.value) {
+    return null
+  }
+
+  authState.value = {
+    ...authState.value,
+    ...payload,
+  }
+
+  if (!isFirebaseConfigured || !auth) {
+    saveMockUser(authState.value)
+  }
+
+  return authState.value
+}

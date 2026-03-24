@@ -1,13 +1,14 @@
-  <script setup>
+<script setup>
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authState } from './services/authService'
-  import appLogo from './assets/blue-logo-1-CDTEx3Yb.png'
+import appLogo from './assets/blue-logo-1-CDTEx3Yb.png'
 
 const router = useRouter()
 const route = useRoute()
 const headerSearch = ref('')
 const isAuthenticated = computed(() => Boolean(authState.value))
+const profilePhoto = computed(() => authState.value?.photoURL || '')
 
 watch(
   () => route.query.q,
@@ -62,7 +63,15 @@ function goToProtected(path) {
       <nav class="menu">
         <a href="/favorites" @click.prevent="goToProtected('/favorites')">Favoritos</a>
         <a href="/my/products" @click.prevent="goToProtected('/my/products')">Meus Anuncios</a>
-        <RouterLink v-if="isAuthenticated" to="/profile">Meu Perfil</RouterLink>
+        <RouterLink v-if="isAuthenticated" to="/profile" class="profile-link">
+          <img
+            v-if="profilePhoto"
+            :src="profilePhoto"
+            alt="Foto de perfil"
+            class="profile-avatar"
+          />
+          <span>Meu Perfil</span>
+        </RouterLink>
         <RouterLink v-else to="/login">Login</RouterLink>
       </nav>
     </header>
