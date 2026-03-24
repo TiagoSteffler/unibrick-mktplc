@@ -200,7 +200,6 @@ onBeforeUnmount(() => {
                 type="file"
                 accept="image/*"
                 multiple
-                required
                 :disabled="previewPhotos.length >= MAX_PHOTOS || isBusy"
                 @change="handlePhotosChange"
               />
