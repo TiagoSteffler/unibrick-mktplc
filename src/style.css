@@ -57,9 +57,17 @@ a {
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
   font-weight: 700;
   color: #0f172a;
   white-space: nowrap;
+}
+
+.brand-logo {
+  height: 68px;
+  width: auto;
+  display: block;
 }
 
 .header-search {
@@ -195,6 +203,10 @@ select {
 
   .topbar-main {
     grid-template-columns: 1fr;
+  }
+
+  .brand-logo {
+    height: 52px;
   }
 
   .menu {

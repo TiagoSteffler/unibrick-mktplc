@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import HomeSearchView from '../views/HomeSearchView.vue'
 import ProductView from '../views/ProductView.vue'
@@ -51,7 +51,8 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  // Hash mode avoids direct URL 404 issues on static hosts like GitHub Pages.
+  history: createWebHashHistory(import.meta.env.BASE_URL),
   routes,
 })
 

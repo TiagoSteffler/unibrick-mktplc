@@ -1,7 +1,8 @@
-<script setup>
+  <script setup>
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authState } from './services/authService'
+  import appLogo from './assets/blue-logo-1-CDTEx3Yb.png'
 
 const router = useRouter()
 const route = useRoute()
@@ -41,7 +42,9 @@ function goToProtected(path) {
   <div class="app-shell">
     <header class="topbar">
       <div class="topbar-main">
-        <RouterLink to="/" class="brand">UniBrick Marketplace</RouterLink>
+        <RouterLink to="/" class="brand">
+          <img :src="appLogo" alt="UniBrik" class="brand-logo" />
+        </RouterLink>
         <form class="header-search" @submit.prevent="submitHeaderSearch">
           <input
             v-model="headerSearch"
@@ -49,6 +52,7 @@ function goToProtected(path) {
             placeholder="Buscar produtos"
             aria-label="Buscar produtos"
           />
+
           <button type="submit" class="header-search-btn" aria-label="Pesquisar">
             <span class="search-icon" aria-hidden="true"></span>
           </button>

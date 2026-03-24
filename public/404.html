@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Redirecionando...</title>
+    <script>
+      (function () {
+        var segments = window.location.pathname.split('/').filter(Boolean)
+        var hasProjectBase = segments.length > 0
+        var basePath = hasProjectBase ? '/' + segments[0] + '/' : '/'
+        var routeSegments = hasProjectBase ? segments.slice(1) : segments
+        var routePath = '/' + routeSegments.join('/')
+
+        if (routePath === '/') {
+          routePath = '/'
+        }
+
+        var query = window.location.search || ''
+        var hash = window.location.hash || ''
+        var destination = window.location.origin + basePath + '#' + routePath + query + hash
+
+        window.location.replace(destination)
+      })()
+    </script>
+  </head>
+  <body>
+    <p>Redirecionando para o aplicativo...</p>
+  </body>
+</html>
