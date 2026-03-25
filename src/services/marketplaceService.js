@@ -426,7 +426,17 @@ export async function createProduct(payload, user) {
   let photos = normalizePhotoList(payload.photos)
 
   if (isFirebaseConfigured && db && hasFiles) {
-    photos = await uploadPhotosToStorage(payload.photoFiles, user)
+    try {
+      photos = await uploadPhotosToStorage(payload.photoFiles, user)
+    } catch (uploadError) {
+      const fallbackPhotos = normalizePhotoList(payload.photos)
+
+      if (!fallbackPhotos.length) {
+        throw uploadError
+      }
+
+      photos = fallbackPhotos
+    }
   }
 
   validatePhotoCount(photos)
