@@ -25,6 +25,7 @@ const USER_PROFILE_KEY = 'marketplace_user_profiles'
 const PRODUCTS_COLLECTION = 'products'
 const MIN_PRODUCT_PHOTOS = 1
 const MAX_PRODUCT_PHOTOS = 5
+const MAX_PRODUCT_PRICE = 9999.99
 
 const seedSellers = {
   'seller-1': {
@@ -78,6 +79,8 @@ function normalizeProduct(product) {
     createdAt: product.createdAt || new Date().toISOString().slice(0, 10),
     price: Number(product.price || 0),
     condition: product.condition || 'usado',
+    deliveryOptions: product.deliveryOptions || { delivery: false, retrieval: true },
+    retrievalLocation: product.retrievalLocation || '',
     photos: Array.isArray(product.photos) ? product.photos.filter(Boolean) : [],
   }
 }
@@ -98,6 +101,16 @@ function validatePhotoCount(photos) {
   if (photos.length > MAX_PRODUCT_PHOTOS) {
     throw new Error(`Envie no maximo ${MAX_PRODUCT_PHOTOS} fotos por produto.`)
   }
+}
+
+function validateProductPrice(price) {
+  const numericPrice = Number(price)
+
+  if (!Number.isFinite(numericPrice) || numericPrice < 0 || numericPrice > MAX_PRODUCT_PRICE) {
+    throw new Error('O preco deve estar entre R$ 0,00 e R$ 9.999,99.')
+  }
+
+  return Number(numericPrice.toFixed(2))
 }
 
 async function uploadPhotosToStorage(files, user) {
@@ -224,14 +237,17 @@ async function getSellerPreviewById(sellerId) {
   }
 
   const sample = sellerSnapshot.docs[0].data()
+  const profiles = readUserProfiles()
+  const sellerProfile = profiles[sellerId] || {}
 
   return {
     id: sellerId,
-    name: sample.sellerName || 'Vendedor',
-    photoURL: sample.sellerPhotoURL || '',
-    city: 'Nao informado',
-    joinedAt: sample.createdAt || new Date().toISOString().slice(0, 10),
-    about: 'Perfil publico baseado nos anuncios do vendedor.',
+    name: sellerProfile.fullName || sample.sellerName || 'Vendedor',
+    photoURL: sellerProfile.photoURL || sample.sellerPhotoURL || '',
+    city: sellerProfile.hometown || 'Nao informado',
+    joinedAt:
+      sellerProfile.createdAt || sample.createdAt || new Date().toISOString().slice(0, 10),
+    about: sellerProfile.aboutMe || 'Nao Disponivel',
   }
 }
 
@@ -269,15 +285,16 @@ function sellerFromUser(user) {
     id: user.uid,
     name: registered?.fullName || user.displayName || 'Meu Perfil',
     photoURL: registered?.photoURL || user.photoURL || '',
-    city: registered?.neighborhood || 'Nao informado',
-    joinedAt: new Date().toISOString().slice(0, 10),
-    about: registered?.gender
-      ? `Perfil configurado no cadastro. Sexo: ${registered.gender}.`
-      : 'Perfil criado com login de usuario.',
+    city: registered?.hometown || 'Nao informado',
+    joinedAt: registered?.createdAt || new Date().toISOString().slice(0, 10),
+    about: registered?.aboutMe || 'Nao Disponivel',
     email: user.email || '',
     gender: registered?.gender || '',
     neighborhood: registered?.neighborhood || '',
+    hometown: registered?.hometown || '',
+    aboutMe: registered?.aboutMe || '',
     fullName: registered?.fullName || user.displayName || '',
+    createdAt: registered?.createdAt || new Date().toISOString().slice(0, 10),
   }
 }
 
@@ -304,19 +321,26 @@ function isProfileComplete(profile) {
     String(profile.fullName || '').trim() &&
       String(profile.gender || '').trim() &&
       String(profile.neighborhood || '').trim() &&
+      String(profile.hometown || '').trim() &&
       String(profile.email || '').trim(),
   )
 }
 
 function normalizeUserProfile(profile, user) {
   const email = user?.email || ''
+  const now = new Date().toISOString().slice(0, 10)
 
   return {
     fullName: String(profile?.fullName || getSuggestedName(user)).trim(),
     gender: String(profile?.gender || '').trim(),
     neighborhood: String(profile?.neighborhood || '').trim(),
+    hometown: String(profile?.hometown || '').trim(),
+    aboutMe: String(profile?.aboutMe || '')
+      .trim()
+      .slice(0, 300),
     photoURL: String(profile?.photoURL || user?.photoURL || '').trim(),
     email,
+    createdAt: String(profile?.createdAt || now),
     updatedAt: new Date().toISOString(),
   }
 }
@@ -410,7 +434,18 @@ export async function getProductById(productId) {
 }
 
 export async function getSellerById(sellerId) {
-  return seedSellers[sellerId] || (await getSellerPreviewById(sellerId)) || null
+  const seeded = seedSellers[sellerId]
+
+  if (seeded) {
+    return {
+      ...seeded,
+      city: seeded.city || 'Nao informado',
+      joinedAt: seeded.joinedAt || new Date().toISOString().slice(0, 10),
+      about: seeded.about || 'Nao Disponivel',
+    }
+  }
+
+  return (await getSellerPreviewById(sellerId)) || null
 }
 
 export async function getSellerProducts(sellerId) {
@@ -424,6 +459,7 @@ export async function createProduct(payload, user) {
 
   const hasFiles = Array.isArray(payload.photoFiles) && payload.photoFiles.length > 0
   let photos = normalizePhotoList(payload.photos)
+  const validPrice = validateProductPrice(payload.price)
 
   if (isFirebaseConfigured && db && hasFiles) {
     try {
@@ -447,9 +483,11 @@ export async function createProduct(payload, user) {
       title: payload.title,
       description: payload.description,
       category: payload.category,
-      price: Number(payload.price),
+      price: validPrice,
       photos,
       condition: payload.condition || 'usado',
+      deliveryOptions: payload.deliveryOptions,
+      retrievalLocation: payload.retrievalLocation,
       sellerId: user.uid,
       sellerName: user.displayName || 'Vendedor',
       sellerPhotoURL: user.photoURL || '',
@@ -463,6 +501,8 @@ export async function createProduct(payload, user) {
       price: documentPayload.price,
       photos: documentPayload.photos,
       condition: documentPayload.condition,
+      deliveryOptions: documentPayload.deliveryOptions,
+      retrievalLocation: documentPayload.retrievalLocation,
       sellerId: documentPayload.sellerId,
       sellerName: documentPayload.sellerName,
       sellerPhotoURL: documentPayload.sellerPhotoURL,
@@ -482,9 +522,11 @@ export async function createProduct(payload, user) {
     title: payload.title,
     description: payload.description,
     category: payload.category,
-    price: payload.price,
+    price: validPrice,
     photos,
     condition: payload.condition || 'usado',
+    deliveryOptions: payload.deliveryOptions,
+    retrievalLocation: payload.retrievalLocation,
     sellerId: user.uid,
     createdAt: new Date().toISOString().slice(0, 10),
   })
@@ -499,6 +541,11 @@ export async function updateProduct(productId, payload, user) {
   if (!user) {
     throw new Error('Usuario nao autenticado')
   }
+
+  const hasFiles = Array.isArray(payload.photoFiles) && payload.photoFiles.length > 0
+  let nextPhotos = normalizePhotoList(payload.photos)
+  
+  const validPrice = validateProductPrice(payload.price)
 
   if (isFirebaseConfigured && db) {
     const reference = doc(db, PRODUCTS_COLLECTION, String(productId))
@@ -516,8 +563,20 @@ export async function updateProduct(productId, payload, user) {
     if (current.sellerId !== user.uid) {
       throw new Error('Voce nao tem permissao para editar este anuncio.')
     }
+    
+    if (hasFiles) {
+      try {
+        const uploadedPhotos = await uploadPhotosToStorage(payload.photoFiles, user)
+        nextPhotos = normalizePhotoList([...nextPhotos, ...uploadedPhotos])
+      } catch (uploadError) {
+        const fallbackPhotos = normalizePhotoList([...nextPhotos, ...payload.photos.filter(p => String(p).startsWith('data:'))])
+        if (!fallbackPhotos.length) {
+          throw uploadError
+        }
+        nextPhotos = fallbackPhotos
+      }
+    }
 
-    const nextPhotos = normalizePhotoList(payload.photos)
     validatePhotoCount(nextPhotos)
 
     const updated = normalizeProduct({
@@ -525,9 +584,11 @@ export async function updateProduct(productId, payload, user) {
       title: payload.title,
       description: payload.description,
       category: payload.category,
-      price: Number(payload.price),
+      price: validPrice,
       photos: nextPhotos,
       condition: payload.condition || current.condition,
+      deliveryOptions: payload.deliveryOptions,
+      retrievalLocation: payload.retrievalLocation,
       sellerName: user.displayName || current.sellerName,
       sellerPhotoURL: user.photoURL || current.sellerPhotoURL,
     })
@@ -539,6 +600,8 @@ export async function updateProduct(productId, payload, user) {
       price: updated.price,
       photos: updated.photos,
       condition: updated.condition,
+      deliveryOptions: updated.deliveryOptions,
+      retrievalLocation: updated.retrievalLocation,
       sellerName: updated.sellerName,
       sellerPhotoURL: updated.sellerPhotoURL,
     })
@@ -559,7 +622,13 @@ export async function updateProduct(productId, payload, user) {
     throw new Error('Voce nao tem permissao para editar este anuncio.')
   }
 
-  const nextPhotos = normalizePhotoList(payload.photos)
+  if (hasFiles) {
+     const fallbackPhotos = normalizePhotoList([...nextPhotos, ...payload.photos.filter(p => String(p).startsWith('data:'))])
+     if (fallbackPhotos.length > 0) {
+        nextPhotos = fallbackPhotos
+     }
+  }
+
   validatePhotoCount(nextPhotos)
 
   const updated = normalizeProduct({
@@ -567,9 +636,11 @@ export async function updateProduct(productId, payload, user) {
     title: payload.title,
     description: payload.description,
     category: payload.category,
-    price: Number(payload.price),
+    price: validPrice,
     photos: nextPhotos,
     condition: payload.condition || current.condition,
+    deliveryOptions: payload.deliveryOptions,
+    retrievalLocation: payload.retrievalLocation,
   })
 
   extra[index] = updated

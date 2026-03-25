@@ -2,10 +2,13 @@
 import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { authState } from '../services/authService'
-import { createProduct } from '../services/marketplaceService'
+import { createProduct, getUserProfile } from '../services/marketplaceService'
+import { PRODUCT_CATEGORIES, RETRIEVAL_LOCATIONS } from '../constants/productOptions'
 
 const router = useRouter()
 const user = computed(() => authState.value)
+const userProfile = computed(() => getUserProfile(user.value))
+
 const success = ref('')
 const error = ref('')
 const isSubmitting = ref(false)
@@ -17,13 +20,69 @@ let redirectTimer = null
 
 const isBusy = computed(() => isSubmitting.value || isRedirecting.value)
 
+const dynamicRetrievalLocation = computed(() => {
+  const customLocation = userProfile.value?.neighborhood || ''
+  return customLocation ? `${customLocation}` : 'Bairro salvo no perfil'
+})
+
 const form = reactive({
   title: '',
   price: '',
+  priceDisplay: 'R$ 0,00',
   category: '',
   description: '',
   condition: 'usado',
+  deliveryOptions: {
+    delivery: false,
+    retrieval: true,
+  },
+  retrievalLocation: 'UFSM',
 })
+
+const MAX_PRICE_CENTS = 999999
+
+function clampPriceFromInput(rawValue) {
+  const onlyDigits = String(rawValue || '').replace(/\D/g, '').slice(0, 6)
+  const normalizedDigits = onlyDigits || '0'
+  const cents = Math.min(Number.parseInt(normalizedDigits, 10) || 0, MAX_PRICE_CENTS)
+
+  const formatted = (cents / 100).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+
+  form.priceDisplay = formatted
+  form.price = (cents / 100).toFixed(2)
+}
+
+function formatPriceInput(event) {
+  clampPriceFromInput(event.target.value)
+  event.target.value = form.priceDisplay
+}
+
+function handlePriceKeydown(event) {
+  if (event.key === 'Backspace' || event.key === 'Delete') {
+     let value = form.priceDisplay.replace(/\D/g, '')
+     if (value.length > 0) {
+        value = value.slice(0, -1)
+        if (!value) value = '0'
+        
+        const numericValue = parseInt(value, 10)
+
+        clampPriceFromInput(String(numericValue))
+        event.preventDefault()
+     }
+  }
+}
+
+function handlePriceFocus(event) {
+  const el = event.target
+  setTimeout(() => {
+    el.selectionStart = el.selectionEnd = el.value.length
+  }, 0)
+}
 
 function readFileAsDataURL(file) {
   return new Promise((resolve, reject) => {
@@ -51,6 +110,15 @@ async function handlePhotosChange(event) {
 
   const selected = Array.from(event.target.files || [])
 
+  await processSelectedPhotos(selected)
+  event.target.value = ''
+}
+
+async function processSelectedPhotos(selected) {
+  if (isBusy.value) {
+    return
+  }
+
   if (!selected.length) {
     return
   }
@@ -61,7 +129,6 @@ async function handlePhotosChange(event) {
 
   if (availableSlots <= 0) {
     error.value = `Voce pode enviar no maximo ${MAX_PHOTOS} fotos.`
-    event.target.value = ''
     return
   }
 
@@ -73,9 +140,17 @@ async function handlePhotosChange(event) {
     previewPhotos.value.push(...encoded)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Falha ao carregar imagens.'
-  } finally {
-    event.target.value = ''
   }
+}
+
+async function handlePhotoDrop(event) {
+  if (isBusy.value) {
+    return
+  }
+
+  event.preventDefault()
+  const dropped = Array.from(event.dataTransfer?.files || [])
+  await processSelectedPhotos(dropped)
 }
 
 function resetForm() {
@@ -118,6 +193,13 @@ async function submitProduct() {
     return
   }
 
+  const numericPrice = Number(form.price)
+
+  if (!Number.isFinite(numericPrice) || numericPrice < 0 || numericPrice > 9999.99) {
+    error.value = 'O preco deve estar entre R$ 0,00 e R$ 9.999,99.'
+    return
+  }
+
   isSubmitting.value = true
 
   try {
@@ -128,6 +210,8 @@ async function submitProduct() {
         category: form.category,
         description: form.description,
         condition: form.condition,
+        deliveryOptions: { ...form.deliveryOptions },
+        retrievalLocation: form.deliveryOptions.retrieval ? form.retrievalLocation : '',
         photos: [...previewPhotos.value],
         photoFiles: [...photos.value],
       },
@@ -175,12 +259,23 @@ onBeforeUnmount(() => {
 
         <label class="field">
           <span>Preco</span>
-          <input v-model="form.price" type="number" required min="0" step="0.01" placeholder="0,00" />
+          <input 
+            v-model="form.priceDisplay" 
+            type="text" 
+            required 
+            @input="formatPriceInput" 
+            @keydown="handlePriceKeydown"
+            @focus="handlePriceFocus"
+            @click="handlePriceFocus"
+          />
         </label>
 
         <label class="field">
           <span>Categoria</span>
-          <input v-model="form.category" type="text" required placeholder="Ex.: Eletronicos" />
+          <select v-model="form.category" required>
+            <option value="" disabled selected>Selecione uma categoria</option>
+            <option v-for="cat in PRODUCT_CATEGORIES" :key="cat" :value="cat">{{ cat }}</option>
+          </select>
         </label>
 
         <label class="field">
@@ -188,6 +283,29 @@ onBeforeUnmount(() => {
           <select v-model="form.condition" required>
             <option value="usado">Usado</option>
             <option value="novo">Novo</option>
+          </select>
+        </label>
+        
+        <fieldset class="field" style="border: none; padding: 0; margin-top: 8px;">
+          <legend style="margin-bottom: 8px;">Metodos de entrega</legend>
+          <div style="display: flex; gap: 16px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" v-model="form.deliveryOptions.delivery" />
+              <span>Entrega</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" v-model="form.deliveryOptions.retrieval" />
+              <span>Retirada</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <label class="field" v-if="form.deliveryOptions.retrieval">
+          <span>Local de retirada</span>
+          <select v-model="form.retrievalLocation" required>
+            <option :value="RETRIEVAL_LOCATIONS[0]">{{ RETRIEVAL_LOCATIONS[0] }}</option>
+            <option value="bairro">{{ dynamicRetrievalLocation }}</option>
+            <option :value="RETRIEVAL_LOCATIONS[1]">{{ RETRIEVAL_LOCATIONS[1] }}</option>
           </select>
         </label>
         </div>
@@ -203,6 +321,12 @@ onBeforeUnmount(() => {
                 :disabled="previewPhotos.length >= MAX_PHOTOS || isBusy"
                 @change="handlePhotosChange"
               />
+              <span
+                class="drop-target"
+                @dragenter.prevent
+                @dragover.prevent
+                @drop.prevent="handlePhotoDrop"
+              ></span>
               <strong>Arraste ou clique para selecionar</strong>
               <small class="muted">Minimo 1 foto e maximo {{ MAX_PHOTOS }} arquivos.</small>
             </label>

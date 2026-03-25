@@ -28,6 +28,7 @@ a {
 .app-shell {
   font-family: 'Segoe UI', Tahoma, sans-serif;
   max-width: 1550px;
+  width: min(calc(100% - 32px), 1550px);
   margin: 0 auto;
   padding: 0 0px 24px;
 }
@@ -159,7 +160,7 @@ a {
 }
 
 .page-wrap {
-  margin-top: calc(var(--topbar-height) + 34px);
+  padding-top: calc(var(--topbar-height) + 34px)
 }
 
 .card {
@@ -175,7 +176,7 @@ a {
   border: none;
   border-radius: 16px;
   padding: 10px 12px;
-  background: #0f172a;
+  background: #093350;
   color: #fff;
   cursor: pointer;
   font-size: 14px;
@@ -263,6 +264,7 @@ select {
 .stack-md {
   display: grid;
   gap: 12px;
+  grid-auto-rows: auto min-content;
 }
 
 .action-row {
@@ -282,6 +284,7 @@ select {
 
 .field {
   display: grid;
+  grid-template-rows: min-content 1fr;
   gap: 6px;
 }
 
@@ -380,11 +383,12 @@ select {
 }
 
 .upload-zone {
+  position: relative;
   border: 1px dashed #0ea5c8;
   border-radius: 14px;
-  min-height: 210px;
   background: #f0f9ff;
   display: grid;
+  min-height: 100%;
   place-items: center;
   text-align: center;
   padding: 16px;
@@ -393,6 +397,18 @@ select {
 
 .upload-zone input {
   display: none;
+}
+
+.drop-target {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.upload-zone > strong,
+.upload-zone > small {
+  position: relative;
+  z-index: 2;
 }
 
 .upload-zone.disabled {
@@ -404,6 +420,7 @@ select {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 10px;
+  min-height: 40%;
 }
 
 .photo-chip {
@@ -513,11 +530,53 @@ select {
   margin: 0;
 }
 
+.product-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.favorite-star-btn {
+  border: 1px solid #d1dce8;
+  background: #fff;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.favorite-star-btn:hover {
+  background: #f8fafc;
+}
+
+.favorite-star-icon {
+  font-size: 24px;
+  line-height: 1;
+  color: #475569;
+}
+
+.favorite-star-icon.active {
+  color: #eab308;
+}
+
 .product-price {
   margin: 8px 0 10px;
   font-size: 32px;
   font-weight: 700;
   color: #0b4d5f;
+}
+
+.product-details-list {
+  display: grid;
+  gap: 8px;
+}
+
+.product-details-list p {
+  margin: 0;
 }
 
 .product-description {
@@ -527,6 +586,17 @@ select {
 
 .product-actions {
   margin-top: 14px;
+}
+
+.product-bottom-actions {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.product-bottom-actions .btn {
+  width: 100%;
 }
 
 @media (max-width: 768px) {
@@ -564,4 +634,5 @@ select {
   .product-page-layout {
     grid-template-columns: 1fr;
   }
+
 }

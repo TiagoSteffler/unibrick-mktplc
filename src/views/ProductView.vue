@@ -12,6 +12,46 @@ const product = ref(null)
 const favorite = ref(false)
 const selectedPhoto = ref('')
 
+const formattedPrice = computed(() => {
+  if (!product.value) {
+    return 'R$ 0,00'
+  }
+
+  return product.value.price.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+})
+
+const deliveryMethods = computed(() => {
+  if (!product.value) {
+    return []
+  }
+
+  const methods = []
+
+  if (product.value.deliveryOptions?.retrieval) {
+    methods.push('Aceita retirada')
+  }
+
+  if (product.value.deliveryOptions?.delivery) {
+    methods.push('Aceita entrega')
+  }
+
+  return methods
+})
+
+const productLocation = computed(() => {
+  if (!product.value) {
+    return 'Nao informado'
+  }
+
+  const location = String(product.value.retrievalLocation || '').trim()
+  return location || 'A combinar'
+})
+
 async function loadProduct() {
   product.value = await getProductById(route.params.id)
 
@@ -21,7 +61,7 @@ async function loadProduct() {
 
   if (product.value && user.value) {
     favorite.value = await isFavorite(user.value, product.value.id)
-  }
+  } 
 }
 
 function selectPhoto(photo) {
@@ -107,18 +147,34 @@ onMounted(() => {
     </article>
 
     <article class="card product-info-card">
-      <h1>{{ product.title }}</h1>
-      <p class="product-price">R$ {{ product.price.toFixed(2) }}</p>
-      <p><strong>Categoria:</strong> {{ product.category }}</p>
-      <p><strong>Estado:</strong> {{ product.condition === 'novo' ? 'Novo' : 'Usado' }}</p>
-      <p><strong>Anunciado em:</strong> {{ product.createdAt }}</p>
-      <p class="muted product-description">{{ product.description }}</p>
-
-      <div class="action-row product-actions">
-        <button class="btn" type="button" @click="handleFavorite">
-          {{ favorite ? 'Desfavoritar' : 'Favoritar' }}
+      <div class="product-title-row">
+        <h1>{{ product.title }}</h1>
+        <button
+          class="favorite-star-btn"
+          type="button"
+          :aria-label="favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'"
+          @click="handleFavorite"
+        >
+          <span :class="['favorite-star-icon', { active: favorite }]">{{ favorite ? '★' : '☆' }}</span>
         </button>
-        <RouterLink class="btn secondary" :to="`/seller/${product.sellerId}`">Ver vendedor</RouterLink>
+      </div>
+
+      <p class="product-price">{{ formattedPrice }}</p>
+
+      <div class="product-details-list">
+        <p><strong>Estado:</strong> {{ product.condition === 'novo' ? 'Novo' : 'Usado' }}</p>
+        <p><strong>Categoria:</strong> {{ product.category }}</p>
+        <p><strong>Descricao:</strong> </p>
+        <p>{{ product.description }}</p>
+        <p><strong>Localizacao:</strong> {{ productLocation }}</p>
+        <p v-if="deliveryMethods.length"><strong>{{ deliveryMethods.join(' | ') }}</strong> </p>
+      </div>
+
+      <div class="product-bottom-actions">
+        <RouterLink class="btn secondary" :to="`/seller/${product.sellerId}?action=contact`">
+          Falar com Vendedor
+        </RouterLink>
+        <RouterLink class="btn" :to="`/seller/${product.sellerId}`">Ver vendedor</RouterLink>
       </div>
     </article>
   </section>

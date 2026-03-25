@@ -17,6 +17,8 @@ const form = reactive({
   fullName: '',
   gender: '',
   neighborhood: '',
+  hometown: '',
+  aboutMe: '',
   photoURL: '',
   email: '',
 })
@@ -30,6 +32,8 @@ function fillForm() {
   form.fullName = profile?.fullName || ''
   form.gender = profile?.gender || ''
   form.neighborhood = profile?.neighborhood || ''
+  form.hometown = profile?.hometown || ''
+  form.aboutMe = profile?.aboutMe || ''
   form.photoURL = profile?.photoURL || ''
   form.email = user.value.email || ''
 }
@@ -72,10 +76,12 @@ async function handleSubmit() {
     return
   }
 
-  if (!form.fullName.trim() || !form.gender || !form.neighborhood.trim()) {
-    error.value = 'Preencha nome completo, sexo e bairro para continuar.'
+  if (!form.fullName.trim() || !form.gender || !form.neighborhood.trim() || !form.hometown.trim()) {
+    error.value = 'Preencha nome completo, sexo, bairro e cidade natal para continuar.'
     return
   }
+
+  form.aboutMe = form.aboutMe.slice(0, 300)
 
   isSaving.value = true
 
@@ -84,6 +90,8 @@ async function handleSubmit() {
       fullName: form.fullName,
       gender: form.gender,
       neighborhood: form.neighborhood,
+      hometown: form.hometown,
+      aboutMe: form.aboutMe,
       photoURL: form.photoURL,
     })
 
@@ -153,6 +161,28 @@ onMounted(() => {
           placeholder="Ex.: Camobi"
           autocomplete="address-level3"
         />
+      </label>
+
+      <label class="field">
+        <span>Cidade natal</span>
+        <input
+          v-model="form.hometown"
+          type="text"
+          required
+          placeholder="Santa Maria/RS"
+          autocomplete="address-level2"
+        />
+      </label>
+
+      <label class="field">
+        <span>Sobre mim</span>
+        <textarea
+          v-model="form.aboutMe"
+          rows="4"
+          maxlength="300"
+          placeholder="Conte um pouco sobre voce"
+        ></textarea>
+        <small class="muted">{{ form.aboutMe.length }}/300</small>
       </label>
 
       <label class="field">
