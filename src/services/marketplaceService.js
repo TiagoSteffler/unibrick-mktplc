@@ -10,8 +10,15 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
-import { db, isFirebaseConfigured, storage } from '../firebase/config'
+import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage'
+import {
+  app,
+  db,
+  firebaseProjectId,
+  firebaseStorageBucket,
+  isFirebaseConfigured,
+  storage,
+} from '../firebase/config'
 
 const EXTRA_PRODUCTS_KEY = 'marketplace_extra_products'
 const USER_PROFILE_KEY = 'marketplace_user_profiles'
@@ -102,13 +109,45 @@ async function uploadPhotosToStorage(files, user) {
   const uploads = files.slice(0, MAX_PRODUCT_PHOTOS).map(async (file, index) => {
     const extension = String(file.name || 'jpg').split('.').pop() || 'jpg'
     const path = `products/${user.uid}/${now}-${index}.${extension}`
-    const storageRef = ref(storage, path)
 
-    await uploadBytes(storageRef, file)
-    return getDownloadURL(storageRef)
+    const uploadWith = async (storageInstance) => {
+      const storageRef = ref(storageInstance, path)
+      await uploadBytes(storageRef, file)
+      return getDownloadURL(storageRef)
+    }
+
+    try {
+      return await uploadWith(storage)
+    } catch (primaryError) {
+      const hasFirestoreDomainBucket = firebaseStorageBucket.endsWith('.firebasestorage.app')
+      const fallbackBucket = firebaseProjectId ? `${firebaseProjectId}.appspot.com` : ''
+      const shouldRetryWithLegacyBucket =
+        hasFirestoreDomainBucket &&
+        fallbackBucket &&
+        fallbackBucket !== firebaseStorageBucket &&
+        app
+
+      if (!shouldRetryWithLegacyBucket) {
+        throw primaryError
+      }
+
+      const fallbackStorage = getStorage(app, `gs://${fallbackBucket}`)
+
+      try {
+        return await uploadWith(fallbackStorage)
+      } catch {
+        throw primaryError
+      }
+    }
   })
 
-  return Promise.all(uploads)
+  try {
+    return await Promise.all(uploads)
+  } catch {
+    throw new Error(
+      'Falha no upload das imagens para o Firebase Storage. Verifique o bucket configurado e as regras/CORS do Storage.',
+    )
+  }
 }
 
 function compareByCreatedAtDesc(a, b) {
