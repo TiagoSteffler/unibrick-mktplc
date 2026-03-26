@@ -1,9 +1,11 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authState } from '../services/authService'
+import AppModal from '../components/AppModal.vue'
 import { deleteProduct, getProductById, getUserProfile, updateProduct } from '../services/marketplaceService'
 import { PRODUCT_CATEGORIES, RETRIEVAL_LOCATIONS } from '../constants/productOptions'
+import { optimizeMarketplaceImage } from '../utils/imageOptimizer'
 
 const route = useRoute()
 const router = useRouter()
@@ -11,19 +13,19 @@ const user = computed(() => authState.value)
 const userProfile = computed(() => getUserProfile(user.value))
 
 const loading = ref(true)
-const success = ref('')
 const error = ref('')
 const isSubmitting = ref(false)
-const isRedirecting = ref(false)
 const isDeleting = ref(false)
+const showSuccessModal = ref(false)
+const showDeleteConfirmModal = ref(false)
+const redirectAfterSave = ref('')
 
 const photos = ref([])
 const previewPhotos = ref([])
 const existingPhotoUrls = ref([])
 const MAX_PHOTOS = 5
-let redirectTimer = null
 
-const isBusy = computed(() => isSubmitting.value || isRedirecting.value || isDeleting.value || loading.value)
+const isBusy = computed(() => isSubmitting.value || isDeleting.value || loading.value)
 
 const dynamicRetrievalLocation = computed(() => {
   const customLocation = userProfile.value?.neighborhood || ''
@@ -135,15 +137,6 @@ async function loadProduct() {
   }
 }
 
-function readFileAsDataURL(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('Falha ao processar imagem.'))
-    reader.readAsDataURL(file)
-  })
-}
-
 function removePhoto(index) {
   if (isBusy.value) {
     return
@@ -192,9 +185,9 @@ async function processSelectedPhotos(selected) {
   const filesToRead = selected.slice(0, availableSlots)
 
   try {
-    const encoded = await Promise.all(filesToRead.map((file) => readFileAsDataURL(file)))
-    photos.value.push(...filesToRead)
-    previewPhotos.value.push(...encoded)
+    const optimizedFiles = await Promise.all(filesToRead.map((file) => optimizeMarketplaceImage(file)))
+    photos.value.push(...optimizedFiles.map((item) => item.file))
+    previewPhotos.value.push(...optimizedFiles.map((item) => item.previewDataUrl))
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Falha ao carregar imagens.'
   }
@@ -210,16 +203,12 @@ async function handlePhotoDrop(event) {
   await processSelectedPhotos(dropped)
 }
 
-function scheduleRedirect(url) {
-  isRedirecting.value = true
+function handleSuccessConfirm() {
+  if (!redirectAfterSave.value) {
+    return
+  }
 
-  redirectTimer = setTimeout(() => {
-    if (redirectTimer) {
-      clearTimeout(redirectTimer)
-      redirectTimer = null
-    }
-    router.push(url)
-  }, 2500)
+  router.push(redirectAfterSave.value)
 }
 
 async function submitEdit() {
@@ -227,7 +216,6 @@ async function submitEdit() {
     return
   }
 
-  success.value = ''
   error.value = ''
 
   if (previewPhotos.value.length < 1) {
@@ -261,8 +249,8 @@ async function submitEdit() {
       user.value,
     )
 
-    success.value = 'Produto atualizado com sucesso! Salvando e atualizando a pagina...'
-    scheduleRedirect(`/product/${updated.id}`)
+    redirectAfterSave.value = `/product/${updated.id}`
+    showSuccessModal.value = true
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Falha ao editar anuncio.'
   } finally {
@@ -274,12 +262,12 @@ async function handleDelete() {
   if (isBusy.value) {
     return
   }
-  
-  const confirmed = window.confirm('Deseja mesmo excluir este produto?')
 
-  if (!confirmed) {
-    return
-  }
+  showDeleteConfirmModal.value = true
+}
+
+async function confirmDelete() {
+  showDeleteConfirmModal.value = false
   
   isDeleting.value = true
   error.value = ''
@@ -297,29 +285,24 @@ onMounted(() => {
   loadProduct()
 })
 
-onBeforeUnmount(() => {
-  if (redirectTimer) {
-    clearTimeout(redirectTimer)
-  }
-})
 </script>
 
 <template>
-  <section v-if="loading" class="card busy">
-    <div class="loading-overlay transparent" aria-live="polite">
-      <span class="spinner" aria-hidden="true"></span>
-      <p>Carregando anuncio...</p>
-    </div>
-  </section>
-
-  <section v-else-if="error && !form.title" class="card">
+  <section v-if="error && !form.title" class="card">
     <p class="status-message error">{{ error }}</p>
     <div class="action-row">
       <RouterLink class="btn secondary" to="/my/products">Voltar para meus produtos</RouterLink>
     </div>
   </section>
   
-  <section v-else class="card product-create-card" :class="{ busy: isBusy }">
+  <section v-else class="card product-create-card loading-section" :class="{ busy: isBusy }">
+    <div v-if="loading || isSubmitting || isDeleting || isRedirecting" class="section-loading-overlay" aria-live="polite">
+      <span class="spinner" aria-hidden="true"></span>
+      <p v-if="loading">Carregando anuncio...</p>
+      <p v-else-if="isDeleting">Excluindo anuncio...</p>
+      <p v-else>Salvando alteracoes e enviando imagens...</p>
+    </div>
+
     <h1>Editar Produto</h1>
 
     <form class="product-form-layout" @submit.prevent="submitEdit" :aria-busy="isSubmitting">
@@ -437,16 +420,27 @@ onBeforeUnmount(() => {
       </fieldset>
     </form>
 
-    <div v-if="isSubmitting || isDeleting || isRedirecting" class="loading-overlay" aria-live="polite">
-      <span class="spinner" aria-hidden="true"></span>
-      <p v-if="isDeleting">Excluindo anuncio...</p>
-      <p v-else>Salvando alteracoes e enviando imagens...</p>
-    </div>
-
     <p v-if="error" class="status-message error">{{ error }}</p>
 
-    <div v-if="success" class="status-message success stack-sm">
-      <p>{{ success }}</p>
-    </div>
+    <AppModal
+      v-model="showDeleteConfirmModal"
+      variant="danger"
+      title="Excluir anuncio"
+      message="Tem certeza que deseja excluir este anuncio? Esta acao nao pode ser desfeita."
+      confirm-text="Excluir anuncio"
+      cancel-text="Cancelar"
+      @confirm="confirmDelete"
+    />
+
+    <AppModal
+      v-model="showSuccessModal"
+      variant="info"
+      title="Edicao concluida"
+      message="Seu anuncio foi atualizado com sucesso."
+      :details="['As alteracoes ja estao disponiveis na pagina do produto.']"
+      confirm-text="Ir para o anuncio"
+      cancel-text="Ficar na edicao"
+      @confirm="handleSuccessConfirm"
+    />
   </section>
 </template>

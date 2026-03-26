@@ -9,6 +9,7 @@ const route = useRoute()
 const headerSearch = ref('')
 const isAuthenticated = computed(() => Boolean(authState.value))
 const profilePhoto = computed(() => authState.value?.photoURL || '')
+const isProfileSetupFlow = computed(() => route.name === 'profile-setup')
 
 watch(
   () => route.query.q,
@@ -41,7 +42,7 @@ function goToProtected(path) {
 
 <template>
   <div class="app-shell">
-    <header class="topbar">
+    <header v-if="!isProfileSetupFlow" class="topbar">
       <div class="topbar-main">
         <RouterLink to="/" class="brand">
           <img :src="appLogo" alt="UniBrik" class="brand-logo" />
@@ -61,22 +62,106 @@ function goToProtected(path) {
       </div>
 
       <nav class="menu">
-        <a href="/favorites" @click.prevent="goToProtected('/favorites')">Favoritos</a>
-        <a href="/my/products" @click.prevent="goToProtected('/my/products')">Meus Anuncios</a>
-        <RouterLink v-if="isAuthenticated" to="/profile" class="profile-link">
+        <a href="/chat" class="menu-item" @click.prevent="goToProtected('/chat')" aria-label="Chat">
+          <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H7l-4 3v-5.5A8.5 8.5 0 1 1 21 11.5z"></path>
+          </svg>
+          <span class="menu-label">Chat</span>
+        </a>
+
+        <a href="/favorites" class="menu-item" @click.prevent="goToProtected('/favorites')" aria-label="Favoritos">
+          <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 21s-6.7-4.35-9.33-7.97A5.75 5.75 0 0 1 12 5.5a5.75 5.75 0 0 1 9.33 7.53C18.7 16.65 12 21 12 21z"></path>
+          </svg>
+          <span class="menu-label">Favoritos</span>
+        </a>
+
+        <a
+          href="/my/products"
+          class="menu-item"
+          @click.prevent="goToProtected('/my/products')"
+          aria-label="Meus anuncios"
+        >
+          <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 7h18"></path>
+            <path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"></path>
+            <path d="M5 7l1 13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-13"></path>
+          </svg>
+          <span class="menu-label">Meus Anuncios</span>
+        </a>
+
+        <RouterLink v-if="isAuthenticated" to="/profile" class="profile-link menu-item" aria-label="Meu perfil">
           <img
             v-if="profilePhoto"
             :src="profilePhoto"
             alt="Foto de perfil"
             class="profile-avatar"
           />
-          <span>Meu Perfil</span>
+          <svg v-else class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+          <span class="menu-label">Meu Perfil</span>
         </RouterLink>
-        <RouterLink v-else to="/login">Login</RouterLink>
+
+        <RouterLink v-else to="/login" class="menu-item" aria-label="Login">
+          <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+          <span class="menu-label">Login</span>
+        </RouterLink>
       </nav>
     </header>
 
-    <main class="page-wrap">
+    <nav v-if="!isProfileSetupFlow" class="mobile-bottom-menu" aria-label="Navegacao mobile">
+      <a href="/chat" class="menu-item" @click.prevent="goToProtected('/chat')" aria-label="Chat">
+        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H7l-4 3v-5.5A8.5 8.5 0 1 1 21 11.5z"></path>
+        </svg>
+      </a>
+
+      <a href="/favorites" class="menu-item" @click.prevent="goToProtected('/favorites')" aria-label="Favoritos">
+        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 21s-6.7-4.35-9.33-7.97A5.75 5.75 0 0 1 12 5.5a5.75 5.75 0 0 1 9.33 7.53C18.7 16.65 12 21 12 21z"></path>
+        </svg>
+      </a>
+
+      <a
+        href="/my/products"
+        class="menu-item"
+        @click.prevent="goToProtected('/my/products')"
+        aria-label="Meus anuncios"
+      >
+        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 7h18"></path>
+          <path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"></path>
+          <path d="M5 7l1 13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-13"></path>
+        </svg>
+      </a>
+
+      <RouterLink v-if="isAuthenticated" to="/profile" class="profile-link menu-item" aria-label="Meu perfil">
+        <img
+          v-if="profilePhoto"
+          :src="profilePhoto"
+          alt="Foto de perfil"
+          class="profile-avatar"
+        />
+        <svg v-else class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+      </RouterLink>
+
+      <RouterLink v-else to="/login" class="menu-item" aria-label="Login">
+        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+      </RouterLink>
+    </nav>
+
+    <main class="page-wrap" :class="{ 'page-wrap-onboarding': isProfileSetupFlow }">
       <RouterView />
     </main>
   </div>

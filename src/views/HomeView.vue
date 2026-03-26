@@ -5,10 +5,17 @@ import { getFreeProducts, getRecentProducts } from '../services/marketplaceServi
 
 const freeProducts = ref([])
 const recentProducts = ref([])
+const isLoading = ref(false)
 
 async function loadSections() {
-  freeProducts.value = await getFreeProducts(8)
-  recentProducts.value = await getRecentProducts(8)
+  isLoading.value = true
+
+  try {
+    freeProducts.value = await getFreeProducts(8)
+    recentProducts.value = await getRecentProducts(8)
+  } finally {
+    isLoading.value = false
+  }
 }
 
 onMounted(() => {
@@ -18,21 +25,34 @@ onMounted(() => {
 
 <template>
   <section class="grid" style="gap: 18px">
-
     <section class="grid" style="gap: 12px">
       <h2>Anuncios Gratuitos</h2>
-      <section class="grid products" v-if="freeProducts.length">
-        <ProductCard v-for="product in freeProducts" :key="product.id" :product="product" />
+      <section class="loading-section home-products-section">
+        <div v-if="isLoading" class="section-loading-overlay" aria-live="polite">
+          <span class="spinner" aria-hidden="true"></span>
+          <p>Carregando anuncios...</p>
+        </div>
+
+        <section class="grid products" v-if="freeProducts.length">
+          <ProductCard v-for="product in freeProducts" :key="product.id" :product="product" />
+        </section>
+        <p v-else class="card muted">Nenhum anuncio gratuito no momento.</p>
       </section>
-      <p v-else class="card muted">Nenhum anuncio gratuito no momento.</p>
     </section>
 
     <section class="grid" style="gap: 12px">
       <h2>Recem Anunciados</h2>
-      <section class="grid products" v-if="recentProducts.length">
-        <ProductCard v-for="product in recentProducts" :key="product.id" :product="product" />
+      <section class="loading-section home-products-section">
+        <div v-if="isLoading" class="section-loading-overlay" aria-live="polite">
+          <span class="spinner" aria-hidden="true"></span>
+          <p>Carregando anuncios...</p>
+        </div>
+
+        <section class="grid products" v-if="recentProducts.length">
+          <ProductCard v-for="product in recentProducts" :key="product.id" :product="product" />
+        </section>
+        <p v-else class="card muted">Nenhum anuncio recente encontrado.</p>
       </section>
-      <p v-else class="card muted">Nenhum anuncio recente encontrado.</p>
     </section>
   </section>
 </template>
@@ -49,5 +69,9 @@ h1 {
 
 h2 {
   font-size: 22px;
+}
+
+.home-products-section {
+  min-height: 200px;
 }
 </style>

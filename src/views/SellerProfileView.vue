@@ -7,6 +7,7 @@ import { getSellerById, getSellerProducts } from '../services/marketplaceService
 const route = useRoute()
 const seller = ref(null)
 const products = ref([])
+const isLoading = ref(false)
 
 function formatDate(value) {
   const parsed = new Date(value)
@@ -19,8 +20,14 @@ function formatDate(value) {
 }
 
 async function loadSellerData() {
-  seller.value = await getSellerById(route.params.sellerId)
-  products.value = await getSellerProducts(route.params.sellerId)
+  isLoading.value = true
+
+  try {
+    seller.value = await getSellerById(route.params.sellerId)
+    products.value = await getSellerProducts(route.params.sellerId)
+  } finally {
+    isLoading.value = false
+  }
 }
 
 onMounted(() => {
@@ -29,14 +36,28 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="grid" style="gap: 16px">
+  <section class="grid loading-section" style="gap: 16px">
+    <div v-if="isLoading" class="section-loading-overlay" aria-live="polite">
+      <span class="spinner" aria-hidden="true"></span>
+      <p>Carregando dados do vendedor...</p>
+    </div>
+
     <article class="card" v-if="seller">
       <div class="seller-profile-head">
-        <img
-          :src="seller.photoURL || 'https://placehold.co/220x220?text=Perfil'"
-          alt="Foto de perfil do vendedor"
-          class="seller-avatar"
-        />
+        <div class="seller-avatar-container">
+          <img
+            v-if="seller?.photoURL"
+            :src="seller.photoURL"
+            alt="Foto de perfil do vendedor"
+            class="seller-avatar"
+          />
+          <div v-else class="seller-avatar-default">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </div>
+        </div>
 
         <div class="seller-info">
           <h1>{{ seller.name }}</h1>
@@ -79,12 +100,36 @@ p {
   align-items: start;
 }
 
-.seller-avatar {
+.seller-avatar-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 120px;
   height: 120px;
+}
+
+.seller-avatar {
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
   object-fit: cover;
   border: 1px solid #cbd5e1;
+}
+
+.seller-avatar-default {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+.seller-avatar-default svg {
+  width: 60px;
+  height: 60px;
 }
 
 .seller-info {

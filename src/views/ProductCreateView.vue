@@ -1,24 +1,24 @@
 <script setup>
-import { computed, onBeforeUnmount, reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { authState } from '../services/authService'
+import AppModal from '../components/AppModal.vue'
 import { createProduct, getUserProfile } from '../services/marketplaceService'
 import { PRODUCT_CATEGORIES, RETRIEVAL_LOCATIONS } from '../constants/productOptions'
+import { optimizeMarketplaceImage } from '../utils/imageOptimizer'
 
 const router = useRouter()
 const user = computed(() => authState.value)
 const userProfile = computed(() => getUserProfile(user.value))
 
-const success = ref('')
 const error = ref('')
 const isSubmitting = ref(false)
-const isRedirecting = ref(false)
+const showSuccessModal = ref(false)
 const photos = ref([])
 const previewPhotos = ref([])
 const MAX_PHOTOS = 5
-let redirectTimer = null
 
-const isBusy = computed(() => isSubmitting.value || isRedirecting.value)
+const isBusy = computed(() => isSubmitting.value)
 
 const dynamicRetrievalLocation = computed(() => {
   const customLocation = userProfile.value?.neighborhood || ''
@@ -84,15 +84,6 @@ function handlePriceFocus(event) {
   }, 0)
 }
 
-function readFileAsDataURL(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('Falha ao processar imagem.'))
-    reader.readAsDataURL(file)
-  })
-}
-
 function removePhoto(index) {
   if (isBusy.value) {
     return
@@ -135,9 +126,9 @@ async function processSelectedPhotos(selected) {
   const filesToRead = selected.slice(0, availableSlots)
 
   try {
-    const encoded = await Promise.all(filesToRead.map((file) => readFileAsDataURL(file)))
-    photos.value.push(...filesToRead)
-    previewPhotos.value.push(...encoded)
+    const optimizedFiles = await Promise.all(filesToRead.map((file) => optimizeMarketplaceImage(file)))
+    photos.value.push(...optimizedFiles.map((item) => item.file))
+    previewPhotos.value.push(...optimizedFiles.map((item) => item.previewDataUrl))
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Falha ao carregar imagens.'
   }
@@ -164,20 +155,7 @@ function resetForm() {
 }
 
 function goToMyProducts() {
-  if (redirectTimer) {
-    clearTimeout(redirectTimer)
-    redirectTimer = null
-  }
-
   router.push('/my/products')
-}
-
-function scheduleRedirect() {
-  isRedirecting.value = true
-
-  redirectTimer = setTimeout(() => {
-    goToMyProducts()
-  }, 2500)
 }
 
 async function submitProduct() {
@@ -185,7 +163,6 @@ async function submitProduct() {
     return
   }
 
-  success.value = ''
   error.value = ''
 
   if (photos.value.length < 1) {
@@ -218,21 +195,14 @@ async function submitProduct() {
       user.value,
     )
 
-    success.value = 'Produto cadastrado com sucesso! Redirecionando para Meus Produtos...'
     resetForm()
-    scheduleRedirect()
+    showSuccessModal.value = true
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Falha ao cadastrar produto.'
   } finally {
     isSubmitting.value = false
   }
 }
-
-onBeforeUnmount(() => {
-  if (redirectTimer) {
-    clearTimeout(redirectTimer)
-  }
-})
 </script>
 
 <template>
@@ -358,13 +328,15 @@ onBeforeUnmount(() => {
 
     <p v-if="error" class="status-message error">{{ error }}</p>
 
-    <div v-if="success" class="status-message success stack-sm">
-      <p>{{ success }}</p>
-      <div class="action-row">
-        <button type="button" class="btn secondary" @click="goToMyProducts">
-          OK, ir para meus produtos
-        </button>
-      </div>
-    </div>
+    <AppModal
+      v-model="showSuccessModal"
+      variant="info"
+      title="Anuncio publicado"
+      message="Seu anuncio foi publicado com sucesso."
+      :details="['As fotos foram processadas e salvas.', 'Voce ja pode gerenciar o anuncio em Meus Produtos.']"
+      confirm-text="Ir para meus produtos"
+      cancel-text="Continuar aqui"
+      @confirm="goToMyProducts"
+    />
   </section>
 </template>

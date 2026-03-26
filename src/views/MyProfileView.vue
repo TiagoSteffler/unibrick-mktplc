@@ -1,16 +1,33 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { authState, signOutUser } from '../services/authService'
+import { useRouter, useRoute } from 'vue-router'
+import { authState, deleteAuthenticatedUser, signOutUser } from '../services/authService'
+import { deleteUserChatData } from '../services/chatService'
+import AppModal from '../components/AppModal.vue'
 import ProductCard from '../components/ProductCard.vue'
-import { getMyProducts, getMyProfile, hasCompletedUserProfile } from '../services/marketplaceService'
+import {
+  deleteUserMarketplaceData,
+  getMyProducts,
+  getMyProfile,
+  hasCompletedUserProfile,
+} from '../services/marketplaceService'
 
 const router = useRouter()
+const route = useRoute()
 const user = computed(() => authState.value)
 const profile = ref(null)
 const myProducts = ref([])
+const isLoading = ref(false)
+const isDeletingAccount = ref(false)
+const showDeleteAccountModal = ref(false)
+const accountActionError = ref('')
 const hasConfiguredProfile = computed(() => hasCompletedUserProfile(user.value))
 const highlightedMyProducts = computed(() => myProducts.value.slice(0, 3))
+const accountDeletionEffects = [
+  'seus dados de perfil',
+  'seus anuncios',
+  'suas conversas ativas',
+]
 
 function formatDate(value) {
   const parsed = new Date(value)
@@ -23,19 +40,59 @@ function formatDate(value) {
 }
 
 async function loadProfile() {
+  isLoading.value = true
+
   if (!user.value) {
     profile.value = null
     myProducts.value = []
+    isLoading.value = false
     return
   }
 
-  profile.value = await getMyProfile(user.value)
-  myProducts.value = await getMyProducts(user.value)
+  try {
+    profile.value = await getMyProfile(user.value)
+    myProducts.value = await getMyProducts(user.value)
+  } finally {
+    isLoading.value = false
+  }
 }
 
 async function handleLogout() {
   await signOutUser()
   router.replace('/')
+}
+
+function handleDeleteAccount() {
+  if (!user.value || isDeletingAccount.value) {
+    return
+  }
+
+  showDeleteAccountModal.value = true
+}
+
+async function confirmDeleteAccount() {
+  isDeletingAccount.value = true
+  accountActionError.value = ''
+
+  try {
+    const currentUser = user.value
+    await deleteUserChatData(currentUser)
+    await deleteUserMarketplaceData(currentUser)
+    await deleteAuthenticatedUser()
+    showDeleteAccountModal.value = false
+    router.replace('/')
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Falha ao excluir a conta. Tente novamente.'
+    const isPermissionDenied =
+      String(err?.code || '').includes('permission-denied') ||
+      message.includes('Missing or insufficient permissions')
+
+    accountActionError.value = isPermissionDenied
+      ? 'Permissao insuficiente no Firebase para remover todos os dados da conta. Revise as regras do Firestore/Storage para permitir exclusao dos dados do proprio usuario.'
+      : message
+  } finally {
+    isDeletingAccount.value = false
+  }
 }
 
 onMounted(() => {
@@ -45,17 +102,40 @@ onMounted(() => {
 watch(user, () => {
   loadProfile()
 })
+
+watch(
+  () => route.name,
+  (newRouteName) => {
+    if (newRouteName === 'profile') {
+      loadProfile()
+    }
+  },
+)
 </script>
 
 <template>
-  <section class="grid" style="gap: 16px" v-if="user">
+  <section class="grid loading-section" style="gap: 16px" v-if="user">
+    <div v-if="isLoading" class="section-loading-overlay" aria-live="polite">
+      <span class="spinner" aria-hidden="true"></span>
+      <p>Carregando perfil...</p>
+    </div>
+
     <article class="card">
       <div class="my-profile-head">
-        <img
-          :src="(profile && profile.photoURL) || user.photoURL || 'https://placehold.co/220x220?text=Perfil'"
-          alt="Minha foto de perfil"
-          class="my-avatar"
-        />
+        <div class="my-avatar-container">
+          <img
+            v-if="profile?.photoURL"
+            :src="profile.photoURL"
+            alt="Minha foto de perfil"
+            class="my-avatar"
+          />
+          <div v-else class="my-avatar-default">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </div>
+        </div>
 
         <div class="my-info">
           <h1>{{ profile?.fullName || user.displayName || 'Meu perfil' }}</h1>
@@ -72,11 +152,23 @@ watch(user, () => {
               Editar perfil
             </RouterLink>
             <RouterLink v-else to="/profile/setup" class="btn secondary">Completar cadastro</RouterLink>
+            <button
+              class="btn danger"
+              type="button"
+              @click="handleDeleteAccount"
+              :disabled="isDeletingAccount"
+            >
+              {{ isDeletingAccount ? 'Excluindo conta...' : 'Excluir conta' }}
+            </button>
             <button class="btn secondary" type="button" @click="handleLogout">Sair</button>
           </div>
+
+          <p v-if="accountActionError" class="account-error">
+            {{ accountActionError }}
+          </p>
         </div>
       </div>
-    </article>
+   </article>
 
     <article class="card">
       <div class="my-products-head">
@@ -84,11 +176,11 @@ watch(user, () => {
         <RouterLink to="/my/products" class="btn secondary">Mais Detalhes</RouterLink>
       </div>
 
-      <p v-if="!myProducts.length" class="muted" style="margin-top: 10px">
+      <p v-if="!myProducts.length" class="muted" style="margin: 10px 18px">
         Voce ainda nao publicou anuncios.
       </p>
 
-      <section v-else class="my-products-preview" aria-label="Previa dos meus anuncios">
+      <section v-else class="grid products  " aria-label="Previa dos meus anuncios">
         <ProductCard
           v-for="product in highlightedMyProducts"
           :key="product.id"
@@ -97,6 +189,7 @@ watch(user, () => {
         />
       </section>
     </article>
+
   </section>
 
   <section class="card" v-else>
@@ -105,6 +198,23 @@ watch(user, () => {
       <RouterLink to="/login" class="btn">Entrar</RouterLink>
     </div>
   </section>
+
+  <AppModal
+    v-model="showDeleteAccountModal"
+    variant="danger"
+    title="Excluir conta"
+    message="Ao apagar sua conta voce perdera o acesso permanentemente e os itens abaixo serao excluidos:"
+    :details="accountDeletionEffects"
+    confirm-text="Excluir conta"
+    confirm-text-busy="Excluindo conta..."
+    cancel-text="Cancelar"
+    require-text="EXCLUIR"
+    require-text-label="Digite exatamente"
+    require-text-placeholder="EXCLUIR"
+    :busy="isDeletingAccount"
+    :close-on-backdrop="false"
+    @confirm="confirmDeleteAccount"
+  />
 </template>
 
 <style scoped>
@@ -127,12 +237,36 @@ p {
   align-items: start;
 }
 
-.my-avatar {
+.my-avatar-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 120px;
   height: 120px;
+}
+
+.my-avatar {
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
   object-fit: cover;
   border: 1px solid #cbd5e1;
+}
+
+.my-avatar-default {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+.my-avatar-default svg {
+  width: 60px;
+  height: 60px;
 }
 
 .my-info {
@@ -152,6 +286,14 @@ p {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
+  margin: 18px;
+  font-size: 18px;
+}
+
+.account-error {
+  margin-top: 10px;
+  color: #b91c1c;
+  font-size: 14px;
 }
 
 .my-products-preview {

@@ -7,10 +7,11 @@ import {
   getDocs,
   limit,
   query,
+  setDoc,
   updateDoc,
   where,
 } from 'firebase/firestore'
-import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage'
+import { deleteObject, getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage'
 import {
   app,
   db,
@@ -23,9 +24,14 @@ import {
 const EXTRA_PRODUCTS_KEY = 'marketplace_extra_products'
 const USER_PROFILE_KEY = 'marketplace_user_profiles'
 const PRODUCTS_COLLECTION = 'products'
+const USER_PROFILES_COLLECTION = 'user_profiles'
 const MIN_PRODUCT_PHOTOS = 1
 const MAX_PRODUCT_PHOTOS = 5
 const MAX_PRODUCT_PRICE = 9999.99
+const PRODUCT_CACHE_TTL = 5 * 60 * 1000 // 5 minutos
+
+// Cache em memória para produtos
+const productCache = new Map()
 
 const seedSellers = {
   'seller-1': {
@@ -64,6 +70,51 @@ function safeRead(key, fallback) {
 
 function safeWrite(key, data) {
   localStorage.setItem(key, JSON.stringify(data))
+}
+
+function getCachedProduct(productId) {
+  const cached = productCache.get(productId)
+  if (!cached) {
+    return null
+  }
+
+  const isExpired = Date.now() - cached.timestamp > PRODUCT_CACHE_TTL
+  if (isExpired) {
+    productCache.delete(productId)
+    return null
+  }
+
+  return cached.data
+}
+
+function setCachedProduct(productId, product) {
+  productCache.set(productId, {
+    data: product,
+    timestamp: Date.now(),
+  })
+}
+
+function invalidateProductCache(productId) {
+  productCache.delete(productId)
+}
+
+async function getUserProfileFromFirestore(userId) {
+  if (!isFirebaseConfigured || !db) {
+    return null
+  }
+
+  try {
+    const userProfileRef = doc(db, USER_PROFILES_COLLECTION, userId)
+    const snapshot = await getDoc(userProfileRef)
+
+    if (!snapshot.exists()) {
+      return null
+    }
+
+    return snapshot.data()
+  } catch {
+    return null
+  }
 }
 
 function normalizeProduct(product) {
@@ -163,6 +214,60 @@ async function uploadPhotosToStorage(files, user) {
   }
 }
 
+function isDataUrlPhoto(photo) {
+  return String(photo || '').startsWith('data:')
+}
+
+function buildFallbackStorage() {
+  const hasFirestoreDomainBucket = firebaseStorageBucket.endsWith('.firebasestorage.app')
+  const fallbackBucket = firebaseProjectId ? `${firebaseProjectId}.appspot.com` : ''
+  const shouldUseFallback =
+    hasFirestoreDomainBucket && fallbackBucket && fallbackBucket !== firebaseStorageBucket && app
+
+  if (!shouldUseFallback) {
+    return null
+  }
+
+  return getStorage(app, `gs://${fallbackBucket}`)
+}
+
+async function deletePhotoFromStorage(photoUrl) {
+  if (!String(photoUrl || '').startsWith('http')) {
+    return
+  }
+
+  const storageTargets = []
+
+  if (storage) {
+    storageTargets.push(storage)
+  }
+
+  const fallbackStorage = buildFallbackStorage()
+
+  if (fallbackStorage) {
+    storageTargets.push(fallbackStorage)
+  }
+
+  for (const storageTarget of storageTargets) {
+    try {
+      await deleteObject(ref(storageTarget, photoUrl))
+      return
+    } catch {
+      // Melhor esforco: mantemos o anuncio consistente mesmo se cleanup falhar.
+    }
+  }
+}
+
+async function deletePhotosFromStorage(photoUrls) {
+  const targets = Array.isArray(photoUrls) ? photoUrls.filter(Boolean) : []
+
+  if (!targets.length) {
+    return
+  }
+
+  await Promise.all(targets.map((photoUrl) => deletePhotoFromStorage(photoUrl)))
+}
+
 function compareByCreatedAtDesc(a, b) {
   return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
 }
@@ -207,16 +312,27 @@ async function getProductByIdFirestore(productId) {
     return getAllProducts().find((item) => item.id === productId) || null
   }
 
+  // Verificar cache primeiro
+  const cached = getCachedProduct(productId)
+  if (cached) {
+    return cached
+  }
+
   const snapshot = await getDoc(doc(db, PRODUCTS_COLLECTION, String(productId)))
 
   if (!snapshot.exists()) {
     return null
   }
 
-  return normalizeProduct({
+  const product = normalizeProduct({
     id: snapshot.id,
     ...snapshot.data(),
   })
+
+  // Armazenar no cache
+  setCachedProduct(productId, product)
+
+  return product
 }
 
 async function getSellerPreviewById(sellerId) {
@@ -253,6 +369,38 @@ async function getSellerPreviewById(sellerId) {
 
 function buildFavoriteKey(userId) {
   return `marketplace_favorites_${userId}`
+}
+
+function clearFavoritesForUser(userId) {
+  if (!userId) {
+    return
+  }
+
+  localStorage.removeItem(buildFavoriteKey(userId))
+}
+
+function removeLocalProductsBySeller(userId) {
+  if (!userId) {
+    return
+  }
+
+  const extra = safeRead(EXTRA_PRODUCTS_KEY, [])
+  const removedIds = extra
+    .filter((item) => item?.sellerId === userId)
+    .map((item) => String(item.id || ''))
+    .filter(Boolean)
+
+  if (!removedIds.length) {
+    return
+  }
+
+  const next = extra.filter((item) => item?.sellerId !== userId)
+  safeWrite(EXTRA_PRODUCTS_KEY, next)
+
+  removedIds.forEach((productId) => {
+    removeProductFromAllFavorites(productId)
+    invalidateProductCache(productId)
+  })
 }
 
 function removeProductFromAllFavorites(productId) {
@@ -353,6 +501,45 @@ function saveUserProfiles(profiles) {
   safeWrite(USER_PROFILE_KEY, profiles)
 }
 
+async function uploadUserProfilePhoto(photoData, userId) {
+  if (!storage) {
+    throw new Error('Storage do Firebase nao esta configurado.')
+  }
+
+  // Se não for data URL, retornar como está (já é URL)
+  if (!String(photoData || '').startsWith('data:')) {
+    return photoData
+  }
+
+  // Converter data URL para Blob
+  const response = await fetch(photoData)
+  const blob = await response.blob()
+
+  const path = `user_profiles/${userId}.jpg`
+  const storageRef = ref(storage, path)
+
+  try {
+    await uploadBytes(storageRef, blob)
+    return getDownloadURL(storageRef)
+  } catch (primaryError) {
+    const hasFirestoreDomainBucket = firebaseStorageBucket.endsWith('.firebasestorage.app')
+    const fallbackBucket = firebaseProjectId ? `${firebaseProjectId}.appspot.com` : ''
+    const shouldRetryWithLegacyBucket =
+      hasFirestoreDomainBucket &&
+      fallbackBucket &&
+      fallbackBucket !== firebaseStorageBucket &&
+      app
+
+    if (!shouldRetryWithLegacyBucket) {
+      throw primaryError
+    }
+
+    const fallbackStorage = getStorage(app, `gs://${fallbackBucket}`)
+    await uploadBytes(ref(fallbackStorage, path), blob)
+    return getDownloadURL(ref(fallbackStorage, path))
+  }
+}
+
 export function getUserProfile(user) {
   if (!user) {
     return null
@@ -372,17 +559,52 @@ export async function saveUserProfile(user, payload) {
     throw new Error('Usuario nao autenticado')
   }
 
+  let processedPhotoURL = payload.photoURL || ''
+
+  // Se Firestore está configurado, fazer upload de foto se necessário
+  if (isFirebaseConfigured && db && String(processedPhotoURL).startsWith('data:')) {
+    try {
+      processedPhotoURL = await uploadUserProfilePhoto(processedPhotoURL, user.uid)
+    } catch (err) {
+      throw new Error(
+        'Falha ao fazer upload da foto de perfil. Verifique a configuração do Firebase Storage.',
+      )
+    }
+  }
+
   const profiles = readUserProfiles()
   const current = profiles[user.uid] || {}
   const merged = {
     ...current,
     ...payload,
+    photoURL: processedPhotoURL,
     email: user.email || '',
   }
 
   const normalized = normalizeUserProfile(merged, user)
   profiles[user.uid] = normalized
   saveUserProfiles(profiles)
+
+  // Salvar no Firestore também
+  if (isFirebaseConfigured && db) {
+    try {
+      const userProfileRef = doc(db, USER_PROFILES_COLLECTION, user.uid)
+      await setDoc(userProfileRef, {
+        fullName: normalized.fullName,
+        gender: normalized.gender,
+        neighborhood: normalized.neighborhood,
+        hometown: normalized.hometown,
+        aboutMe: normalized.aboutMe,
+        photoURL: normalized.photoURL,
+        email: normalized.email,
+        createdAt: normalized.createdAt,
+        updatedAt: normalized.updatedAt,
+      })
+    } catch (err) {
+      // Não falhar se Firestore não funcionar, usar localStorage como fallback
+      console.warn('Falha ao salvar perfil no Firestore:', err)
+    }
+  }
 
   return normalized
 }
@@ -445,6 +667,19 @@ export async function getSellerById(sellerId) {
     }
   }
 
+  // Tentar buscar do Firestore
+  const firestoreProfile = await getUserProfileFromFirestore(sellerId)
+  if (firestoreProfile) {
+    return {
+      id: sellerId,
+      name: firestoreProfile.fullName || 'Vendedor',
+      photoURL: firestoreProfile.photoURL || '',
+      city: firestoreProfile.hometown || 'Nao informado',
+      joinedAt: firestoreProfile.createdAt || new Date().toISOString().slice(0, 10),
+      about: firestoreProfile.aboutMe || 'Nao Disponivel',
+    }
+  }
+
   return (await getSellerPreviewById(sellerId)) || null
 }
 
@@ -462,17 +697,13 @@ export async function createProduct(payload, user) {
   const validPrice = validateProductPrice(payload.price)
 
   if (isFirebaseConfigured && db && hasFiles) {
-    try {
-      photos = await uploadPhotosToStorage(payload.photoFiles, user)
-    } catch (uploadError) {
-      const fallbackPhotos = normalizePhotoList(payload.photos)
+    photos = await uploadPhotosToStorage(payload.photoFiles, user)
+  }
 
-      if (!fallbackPhotos.length) {
-        throw uploadError
-      }
-
-      photos = fallbackPhotos
-    }
+  if (isFirebaseConfigured && db && photos.some((photo) => String(photo).startsWith('data:'))) {
+    throw new Error(
+      'Falha ao salvar fotos no Storage. Nao e permitido salvar imagens em base64 no Firestore devido ao limite de tamanho.',
+    )
   }
 
   validatePhotoCount(photos)
@@ -563,21 +794,28 @@ export async function updateProduct(productId, payload, user) {
     if (current.sellerId !== user.uid) {
       throw new Error('Voce nao tem permissao para editar este anuncio.')
     }
-    
-    if (hasFiles) {
-      try {
-        const uploadedPhotos = await uploadPhotosToStorage(payload.photoFiles, user)
-        nextPhotos = normalizePhotoList([...nextPhotos, ...uploadedPhotos])
-      } catch (uploadError) {
-        const fallbackPhotos = normalizePhotoList([...nextPhotos, ...payload.photos.filter(p => String(p).startsWith('data:'))])
-        if (!fallbackPhotos.length) {
-          throw uploadError
-        }
-        nextPhotos = fallbackPhotos
-      }
+
+    const keptPhotos = normalizePhotoList(payload.photos).filter((photo) => !isDataUrlPhoto(photo))
+    const inlinePhotos = normalizePhotoList(payload.photos).filter((photo) => isDataUrlPhoto(photo))
+    const currentStoredPhotos = normalizePhotoList(current.photos).filter((photo) => !isDataUrlPhoto(photo))
+
+    if (!hasFiles && inlinePhotos.length) {
+      throw new Error(
+        'Falha ao salvar fotos no Storage. Nao e permitido salvar imagens em base64 no Firestore devido ao limite de tamanho.',
+      )
     }
 
+    let uploadedPhotos = []
+
+    if (hasFiles) {
+      uploadedPhotos = await uploadPhotosToStorage(payload.photoFiles, user)
+    }
+
+    nextPhotos = normalizePhotoList([...keptPhotos, ...uploadedPhotos])
+
     validatePhotoCount(nextPhotos)
+
+    const removedPhotos = currentStoredPhotos.filter((photoUrl) => !keptPhotos.includes(photoUrl))
 
     const updated = normalizeProduct({
       ...current,
@@ -605,6 +843,11 @@ export async function updateProduct(productId, payload, user) {
       sellerName: updated.sellerName,
       sellerPhotoURL: updated.sellerPhotoURL,
     })
+
+    await deletePhotosFromStorage(removedPhotos)
+
+    // Invalidar cache do produto atualizado
+    invalidateProductCache(productId)
 
     return updated
   }
@@ -671,8 +914,15 @@ export async function deleteProduct(productId, user) {
       throw new Error('Voce nao tem permissao para excluir este anuncio.')
     }
 
+    const storagePhotos = normalizePhotoList(current.photos).filter((photo) => !isDataUrlPhoto(photo))
+
     await deleteDoc(reference)
+    await deletePhotosFromStorage(storagePhotos)
     removeProductFromAllFavorites(String(productId))
+
+    // Invalidar cache do produto deletado
+    invalidateProductCache(productId)
+
     return
   }
 
@@ -699,6 +949,27 @@ export async function getMyProfile(user) {
     return null
   }
 
+  // Tentar buscar do Firestore primeiro
+  const firestoreProfile = await getUserProfileFromFirestore(user.uid)
+  if (firestoreProfile) {
+    return {
+      id: user.uid,
+      name: firestoreProfile.fullName || user.displayName || 'Meu Perfil',
+      photoURL: firestoreProfile.photoURL || user.photoURL || '',
+      city: firestoreProfile.hometown || 'Nao informado',
+      joinedAt: firestoreProfile.createdAt || new Date().toISOString().slice(0, 10),
+      about: firestoreProfile.aboutMe || 'Nao Disponivel',
+      email: firestoreProfile.email || user.email || '',
+      gender: firestoreProfile.gender || '',
+      neighborhood: firestoreProfile.neighborhood || '',
+      hometown: firestoreProfile.hometown || '',
+      aboutMe: firestoreProfile.aboutMe || '',
+      fullName: firestoreProfile.fullName || user.displayName || '',
+      createdAt: firestoreProfile.createdAt || new Date().toISOString().slice(0, 10),
+    }
+  }
+
+  // Fallback para dados locais/seed
   return seedSellers[user.uid] || sellerFromUser(user)
 }
 
@@ -708,6 +979,44 @@ export async function getMyProducts(user) {
   }
 
   return (await getAllProductsFirestore()).filter((item) => item.sellerId === user.uid)
+}
+
+export async function deleteUserMarketplaceData(user) {
+  if (!user?.uid) {
+    throw new Error('Usuario nao autenticado')
+  }
+
+  const myProducts = await getMyProducts(user)
+
+  for (const product of myProducts) {
+    await deleteProduct(product.id, user)
+  }
+
+  removeLocalProductsBySeller(user.uid)
+
+  const profiles = readUserProfiles()
+  const currentProfile = profiles[user.uid] || null
+
+  if (Object.prototype.hasOwnProperty.call(profiles, user.uid)) {
+    delete profiles[user.uid]
+    saveUserProfiles(profiles)
+  }
+
+  if (isFirebaseConfigured && db) {
+    try {
+      await deleteDoc(doc(db, USER_PROFILES_COLLECTION, user.uid))
+    } catch (err) {
+      console.warn('Falha ao remover perfil do Firestore:', err)
+    }
+  }
+
+  const profilePhoto = String(currentProfile?.photoURL || user.photoURL || '').trim()
+
+  if (profilePhoto) {
+    await deletePhotoFromStorage(profilePhoto)
+  }
+
+  clearFavoritesForUser(user.uid)
 }
 
 export async function getFavoriteProducts(user) {
@@ -743,4 +1052,12 @@ export async function toggleFavorite(user, productId) {
 
   safeWrite(key, next)
   return !exists
+}
+
+export function clearProductCache() {
+  productCache.clear()
+}
+
+export function clearCachedProduct(productId) {
+  invalidateProductCache(productId)
 }

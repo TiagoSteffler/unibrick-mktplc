@@ -19,18 +19,32 @@ const filters = reactive({
 
 const products = ref([])
 const categories = ref([])
+const isLoading = ref(false)
+const areFiltersOpen = ref(false)
 
 async function loadProducts() {
-  const queryTerm = typeof route.query.q === 'string' ? route.query.q.trim() : ''
-  products.value = await searchProducts({
-    ...filters,
-    query: queryTerm,
-  })
+  isLoading.value = true
+
+  try {
+    const queryTerm = typeof route.query.q === 'string' ? route.query.q.trim() : ''
+    products.value = await searchProducts({
+      ...filters,
+      query: queryTerm,
+    })
+  } finally {
+    isLoading.value = false
+  }
 }
 
 async function initialize() {
-  categories.value = await getAvailableCategories()
-  await loadProducts()
+  isLoading.value = true
+
+  try {
+    categories.value = await getAvailableCategories()
+    await loadProducts()
+  } finally {
+    isLoading.value = false
+  }
 }
 
 function resetFilters() {
@@ -40,6 +54,10 @@ function resetFilters() {
   filters.condition = ''
   filters.sortBy = 'recent'
   loadProducts()
+}
+
+function toggleFilters() {
+  areFiltersOpen.value = !areFiltersOpen.value
 }
 
 onMounted(() => {
@@ -60,7 +78,21 @@ watch(
       <h1>Pesquisa</h1>
       <p class="muted">Filtre por preco, categoria e outros criterios.</p>
 
-      <form class="grid" style="margin-top: 14px" @submit.prevent="loadProducts">
+      <button
+        type="button"
+        class="btn secondary filters-toggle"
+        :aria-expanded="areFiltersOpen"
+        @click="toggleFilters"
+      >
+        {{ areFiltersOpen ? 'Ocultar filtros' : 'Mostrar filtros' }}
+      </button>
+
+      <form
+        class="grid filters-form"
+        :class="{ collapsed: !areFiltersOpen }"
+        style="margin-top: 14px"
+        @submit.prevent="loadProducts"
+      >
       <div>
         <label class="filter-label">Categoria</label>
         <select v-model="filters.category" class="dropdown">
@@ -116,11 +148,18 @@ watch(
         <p class="muted">{{ products.length }} produto(s) encontrado(s).</p>
       </article>
 
-      <section class="grid products" v-if="products.length">
-        <ProductCard v-for="product in products" :key="product.id" :product="product" />
-      </section>
+      <section class="loading-section search-products-section">
+        <div v-if="isLoading" class="section-loading-overlay" aria-live="polite">
+          <span class="spinner" aria-hidden="true"></span>
+          <p>Carregando resultados...</p>
+        </div>
 
-      <p v-else class="card muted">Nenhum produto encontrado para os filtros atuais.</p>
+        <section class="grid products" v-if="products.length">
+          <ProductCard v-for="product in products" :key="product.id" :product="product" />
+        </section>
+
+        <p v-else class="card muted">Nenhum produto encontrado para os filtros atuais.</p>
+      </section>
     </section>
   </section>
 </template>
@@ -154,6 +193,20 @@ h2 {
   min-width: 0;
 }
 
+.search-products-section {
+  min-height: 220px;
+}
+
+.filters-toggle {
+  display: none;
+}
+
+.filters-form.collapsed {
+  max-height: none;
+  opacity: 1;
+  pointer-events: auto;
+}
+
 @media (max-width: 1100px) {
   .search-layout {
     grid-template-columns: 1fr;
@@ -168,6 +221,25 @@ h2 {
 
   .search-results {
     margin-left: 0;
+  }
+
+  .filters-toggle {
+    display: inline-flex;
+    margin-top: 12px;
+  }
+
+  .filters-form {
+    overflow: hidden;
+    transition: max-height 0.2s ease, opacity 0.2s ease;
+    max-height: 900px;
+    opacity: 1;
+  }
+
+  .filters-form.collapsed {
+    max-height: 0;
+    opacity: 0;
+    pointer-events: none;
+    margin-top: 0 !important;
   }
 }
 </style>

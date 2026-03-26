@@ -1,7 +1,9 @@
 import { ref } from 'vue'
 import {
   GoogleAuthProvider,
+  deleteUser,
   onAuthStateChanged,
+  reauthenticateWithPopup,
   signInWithPopup,
   signOut,
 } from 'firebase/auth'
@@ -109,6 +111,34 @@ export async function signInWithGoogle() {
 export async function signOutUser() {
   if (isFirebaseConfigured && auth) {
     await signOut(auth)
+    authState.value = null
+    return
+  }
+
+  authState.value = null
+  saveMockUser(null)
+}
+
+export async function deleteAuthenticatedUser() {
+  if (isFirebaseConfigured && auth) {
+    const currentUser = auth.currentUser
+
+    if (!currentUser) {
+      throw new Error('Nao foi possivel validar a sessao para excluir a conta.')
+    }
+
+    try {
+      await deleteUser(currentUser)
+    } catch (err) {
+      if (err?.code === 'auth/requires-recent-login') {
+        const provider = new GoogleAuthProvider()
+        await reauthenticateWithPopup(currentUser, provider)
+        await deleteUser(currentUser)
+      } else {
+        throw err
+      }
+    }
+
     authState.value = null
     return
   }

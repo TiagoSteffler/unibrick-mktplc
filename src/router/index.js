@@ -10,6 +10,7 @@ import ProductCreateView from '../views/ProductCreateView.vue'
 import ProductEditView from '../views/ProductEditView.vue'
 import MyProductsView from '../views/MyProductsView.vue'
 import FavoritesView from '../views/FavoritesView.vue'
+import ChatView from '../views/ChatView.vue'
 import { getCurrentUser, initAuth, waitForAuthInit } from '../services/authService'
 import { hasCompletedUserProfile } from '../services/marketplaceService'
 
@@ -61,6 +62,12 @@ const routes = [
     component: FavoritesView,
     meta: { requiresAuth: true },
   },
+  {
+    path: '/chat',
+    name: 'chat',
+    component: ChatView,
+    meta: { requiresAuth: true },
+  },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
 
@@ -73,26 +80,28 @@ const router = createRouter({
 initAuth()
 
 router.beforeEach(async (to) => {
-  if (!to.meta.requiresAuth) {
-    return true
-  }
-
   await waitForAuthInit()
 
   const user = getCurrentUser()
 
+  if (user) {
+    const hasProfile = hasCompletedUserProfile(user)
+
+    if (!hasProfile && to.name !== 'profile-setup') {
+      return { name: 'profile-setup', query: { redirect: to.fullPath } }
+    }
+
+    if (hasProfile && to.name === 'profile-setup') {
+      return { name: 'profile' }
+    }
+  }
+
+  if (!to.meta.requiresAuth) {
+    return true
+  }
+
   if (!user) {
     return { name: 'login', query: { redirect: to.fullPath } }
-  }
-
-  const hasProfile = hasCompletedUserProfile(user)
-
-  if (!hasProfile && to.name !== 'profile-setup') {
-    return { name: 'profile-setup', query: { redirect: to.fullPath } }
-  }
-
-  if (hasProfile && to.name === 'profile-setup') {
-    return { name: 'profile' }
   }
 
   return true
