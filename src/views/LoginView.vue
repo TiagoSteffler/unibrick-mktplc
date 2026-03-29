@@ -1,8 +1,12 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
+  allowedLoginDomainsText,
+  authError,
   authState,
+  clearAuthError,
+  isLoginDomainRestrictionEnabled,
   signInWithGoogle,
   signOutUser,
 } from '../services/authService'
@@ -12,23 +16,63 @@ import { hasCompletedUserProfile } from '../services/marketplaceService'
 const route = useRoute()
 const router = useRouter()
 const user = computed(() => authState.value)
+const isSigningIn = ref(false)
+const loginError = computed(() => authError.value)
 
-async function handleLogin() {
-  const loggedUser = await signInWithGoogle()
-  const redirectTo = route.query.redirect || '/profile'
+function getRedirectTarget() {
+  const redirectTo = String(route.query.redirect || '/profile')
+
+  if (redirectTo.startsWith('/login')) {
+    return '/profile'
+  }
+
+  return redirectTo
+}
+
+async function redirectAfterLogin(loggedUser) {
+  const redirectTo = getRedirectTarget()
 
   if (!hasCompletedUserProfile(loggedUser)) {
-    router.replace({
+    await router.replace({
       name: 'profile-setup',
       query: { redirect: String(redirectTo) },
     })
     return
   }
 
-  router.replace(String(redirectTo))
+  await router.replace(redirectTo)
+}
+
+watch(
+  user,
+  async (loggedUser) => {
+    if (!loggedUser || route.name !== 'login') {
+      return
+    }
+
+    clearAuthError()
+    await redirectAfterLogin(loggedUser)
+  },
+  { immediate: true },
+)
+
+async function handleLogin() {
+  if (isSigningIn.value) {
+    return
+  }
+
+  isSigningIn.value = true
+  clearAuthError()
+
+  try {
+    await signInWithGoogle()
+  } finally {
+    isSigningIn.value = false
+  }
 }
 
 async function handleLogout() {
+  clearAuthError()
   await signOutUser()
   router.replace('/')
 }
@@ -41,14 +85,24 @@ async function handleLogout() {
       <p class="muted" v-if="isFirebaseConfigured">
         Firebase ativo: login com Google via Auth real.
       </p>
-      <p class="muted" v-else>
+      <p class="muted" v-if="isFirebaseConfigured && isLoginDomainRestrictionEnabled">
+        Login restrito para emails de: {{ allowedLoginDomainsText }}.
+      </p>
+      <p class="muted" v-if="!isFirebaseConfigured">
         Firebase nao configurado: login demo local habilitado para desenvolvimento.
       </p>
 
       <div v-if="!user" class="action-row">
-        <button class="btn" type="button" @click="handleLogin">Entrar com Google</button>
+        <button
+          class="btn"
+          :class="{ disabled: isSigningIn }"
+          type="button"
+          :disabled="isSigningIn"
+          @click="handleLogin"
+        >
+          {{ isSigningIn ? 'Redirecionando para Google...' : 'Entrar com Google' }}
+        </button>
       </div>
-
       <div v-else class="stack-sm">
         <p>Voce esta logado como <strong>{{ user.displayName }}</strong> ({{ user.email }})</p>
         <div class="action-row">
@@ -56,6 +110,8 @@ async function handleLogout() {
           <button class="btn secondary" type="button" @click="handleLogout">Sair</button>
         </div>
       </div>
+
+      <p v-if="loginError" class="status-message error">{{ loginError }}</p>
     </article>
   </section>
 </template>

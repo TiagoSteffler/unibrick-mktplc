@@ -13,8 +13,14 @@ FIRESTORE RULES
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function hasAllowedEmailDomain() {
+      return request.auth != null
+        && request.auth.token.email is string
+        && request.auth.token.email.matches('.*@(acad\\.ufsm\\.br|inf\\.ufsm\\.br|ufsm\\.br)$');
+    }
+
     function isSignedIn() {
-      return request.auth != null;
+      return hasAllowedEmailDomain();
     }
 
     function isOwner(uid) {
@@ -84,14 +90,20 @@ STORAGE RULES
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    function hasAllowedEmailDomain() {
+      return request.auth != null
+        && request.auth.token.email is string
+        && request.auth.token.email.matches('.*@(acad\\.ufsm\\.br|inf\\.ufsm\\.br|ufsm\\.br)$');
+    }
+
     match /products/{userId}/{allPaths=**} {
       allow read: if true;
-      allow write, delete: if request.auth != null && request.auth.uid == userId;
+      allow write, delete: if hasAllowedEmailDomain() && request.auth.uid == userId;
     }
 
     match /user_profiles/{fileName} {
       allow read: if true;
-      allow write, delete: if request.auth != null
+      allow write, delete: if hasAllowedEmailDomain()
         && fileName == request.auth.uid + '.jpg';
     }
   }
@@ -160,4 +172,4 @@ DELETE:
 
 CREATE/UPDATE:
 - Informe request.resource.data conforme a regra valida.
-- Exemplo em products: sellerId deve ser igual ao auth.uid.
+- Exemplo em products: sellerId deve ser igual ao auth.uid e o email deve pertencer a um dominio permitido.

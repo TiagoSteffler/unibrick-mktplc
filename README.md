@@ -76,7 +76,32 @@ VITE_FIREBASE_PROJECT_ID=...
 VITE_FIREBASE_STORAGE_BUCKET=...
 VITE_FIREBASE_MESSAGING_SENDER_ID=...
 VITE_FIREBASE_APP_ID=...
+VITE_ALLOWED_LOGIN_DOMAIN=example.edu,students.example.edu
 ```
+
+Observacoes sobre VITE_ALLOWED_LOGIN_DOMAIN:
+
+- Deixe vazio (ou remova) para aceitar qualquer conta Google.
+- Para restringir, use dominio sem @.
+- Para mais de um dominio, separe por virgula, ponto e virgula ou espaco.
+- Exemplo: example.edu,students.example.edu
+- O app usa redirecionamento no login (sem popup) e valida o dominio no retorno.
+
+### Restricao de dominio no Firebase (recomendado)
+
+Para garantir que apenas o dominio permitido acesse dados no backend, aplique a verificacao tambem nas regras.
+
+Exemplo de funcao para Firestore Rules:
+
+```txt
+function isAllowedDomain() {
+  return request.auth != null
+    && request.auth.token.email is string
+    && request.auth.token.email.matches('.*@(example\\.edu|students\\.example\\.edu)$');
+}
+```
+
+Depois, use isAllowedDomain() junto das regras de create/update/delete.
 
 ## Parte 5: Rodar localmente
 
@@ -112,6 +137,7 @@ No repositorio GitHub, configure os Secrets:
 - VITE_FIREBASE_STORAGE_BUCKET
 - VITE_FIREBASE_MESSAGING_SENDER_ID
 - VITE_FIREBASE_APP_ID
+- VITE_ALLOWED_LOGIN_DOMAIN (opcional; aceita lista separada por virgula)
 
 Depois:
 
@@ -147,21 +173,27 @@ Para sair de localStorage e usar backend real:
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isAllowedDomain() {
+      return request.auth != null
+        && request.auth.token.email is string
+        && request.auth.token.email.matches('.*@(example\\.edu|students\\.example\\.edu)$');
+    }
+
     match /products/{productId} {
       allow read: if true;
-      allow create: if request.auth != null
+      allow create: if isAllowedDomain()
         && request.resource.data.sellerId == request.auth.uid;
-      allow update, delete: if request.auth != null
+      allow update, delete: if isAllowedDomain()
         && resource.data.sellerId == request.auth.uid;
     }
 
     match /users/{userId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isAllowedDomain();
+      allow write: if isAllowedDomain() && request.auth.uid == userId;
     }
 
     match /users/{userId}/favorites/{productId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isAllowedDomain() && request.auth.uid == userId;
     }
   }
 }
