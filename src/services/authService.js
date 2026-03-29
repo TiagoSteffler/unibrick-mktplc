@@ -5,6 +5,7 @@ import {
   getRedirectResult,
   onAuthStateChanged,
   reauthenticateWithPopup,
+  signInWithPopup,
   signInWithRedirect,
   signOut,
 } from 'firebase/auth'
@@ -12,6 +13,8 @@ import { auth, isFirebaseConfigured } from '../firebase/config'
 
 const MOCK_USER_KEY = 'marketplace_mock_user'
 const DOMAIN_PLACEHOLDER = 'example.edu'
+const AUTH_FLOW_POPUP = 'popup'
+const AUTH_FLOW_REDIRECT = 'redirect'
 
 function parseAllowedLoginDomains(rawValue) {
   const normalized = String(rawValue || '').trim().toLowerCase()
@@ -31,10 +34,24 @@ function parseAllowedLoginDomains(rawValue) {
 }
 
 const configuredLoginDomains = parseAllowedLoginDomains(import.meta.env.VITE_ALLOWED_LOGIN_DOMAIN)
+const configuredAuthFlow = String(import.meta.env.VITE_FIREBASE_AUTH_FLOW || AUTH_FLOW_REDIRECT)
+  .trim()
+  .toLowerCase()
+
+function resolveAuthFlow(value) {
+  if (value === AUTH_FLOW_POPUP) {
+    return AUTH_FLOW_POPUP
+  }
+
+  return AUTH_FLOW_REDIRECT
+}
+
+const selectedAuthFlow = resolveAuthFlow(configuredAuthFlow)
 
 export const authState = ref(null)
 export const authReady = ref(false)
 export const authError = ref('')
+export const authFlow = selectedAuthFlow
 export const allowedLoginDomains = configuredLoginDomains.length
   ? configuredLoginDomains
   : [DOMAIN_PLACEHOLDER]
@@ -85,6 +102,10 @@ function saveMockUser(user) {
 function getFriendlyAuthErrorMessage(error) {
   const code = String(error?.code || '')
 
+  if (code === 'auth/invalid-action-code') {
+    return 'Acao de login invalida. Verifique dom\u00ednios autorizados no Firebase Authentication e tente novamente.'
+  }
+
   if (code === 'auth/unauthorized-domain') {
     return 'O dominio atual nao esta autorizado no Firebase Authentication.'
   }
@@ -99,6 +120,10 @@ function getFriendlyAuthErrorMessage(error) {
 
   if (code === 'auth/network-request-failed') {
     return 'Falha de rede ao falar com o Firebase. Tente novamente.'
+  }
+
+  if (code === 'auth/popup-blocked') {
+    return 'O navegador bloqueou o popup de login. Tente modo redirect ou permita popups para este site.'
   }
 
   return error instanceof Error
@@ -133,6 +158,23 @@ function getDomainRestrictionMessage() {
   return `Use um email de um dos dominios permitidos: ${allowedLoginDomainsText}.`
 }
 
+async function applyDomainRestrictionOrSignOut(user) {
+  if (!shouldRejectByDomain(user?.email)) {
+    return mapUser(user)
+  }
+
+  authError.value = getDomainRestrictionMessage()
+
+  try {
+    await signOut(auth)
+  } catch {
+    // No-op: user is blocked by domain validation anyway.
+  }
+
+  authState.value = null
+  return null
+}
+
 export function clearAuthError() {
   authError.value = ''
 }
@@ -150,15 +192,7 @@ export function initAuth() {
 
       onAuthStateChanged(auth, async (user) => {
         if (user && shouldRejectByDomain(user.email)) {
-          authError.value = getDomainRestrictionMessage()
-
-          try {
-            await signOut(auth)
-          } catch {
-            // No-op: keeping the user signed out is enough for this flow.
-          }
-
-          authState.value = null
+          await applyDomainRestrictionOrSignOut(user)
           authReady.value = true
           resolve(authState.value)
           return
@@ -201,12 +235,33 @@ export async function signInWithGoogle() {
     clearAuthError()
 
     const provider = new GoogleAuthProvider()
+    const providerParams = {
+      prompt: 'select_account',
+    }
 
-    if (isLoginDomainRestrictionEnabled) {
-      provider.setCustomParameters({
-        hd: configuredLoginDomains[0],
-        prompt: 'select_account',
-      })
+    // The hd parameter supports a single domain hint only.
+    if (isLoginDomainRestrictionEnabled && configuredLoginDomains.length === 1) {
+      providerParams.hd = configuredLoginDomains[0]
+    }
+
+    provider.setCustomParameters(providerParams)
+
+    if (selectedAuthFlow === AUTH_FLOW_POPUP) {
+      try {
+        const result = await signInWithPopup(auth, provider)
+        const validatedUser = await applyDomainRestrictionOrSignOut(result.user)
+
+        authState.value = validatedUser
+
+        if (validatedUser) {
+          clearAuthError()
+        }
+
+        return validatedUser
+      } catch (err) {
+        authError.value = getFriendlyAuthErrorMessage(err)
+        return null
+      }
     }
 
     try {
