@@ -11,7 +11,15 @@ import ProductEditView from '../views/ProductEditView.vue'
 import MyProductsView from '../views/MyProductsView.vue'
 import FavoritesView from '../views/FavoritesView.vue'
 import ChatView from '../views/ChatView.vue'
-import { getCurrentUser, initAuth, waitForAuthInit } from '../services/authService'
+import {
+  getCurrentUser,
+  getLoginDomainRestrictionMessage,
+  initAuth,
+  isLoginEmailAllowed,
+  setAuthErrorMessage,
+  signOutUser,
+  waitForAuthInit,
+} from '../services/authService'
 import { hasCompletedUserProfile } from '../services/marketplaceService'
 
 const routes = [
@@ -83,6 +91,18 @@ router.beforeEach(async (to) => {
   await waitForAuthInit()
 
   const user = getCurrentUser()
+
+  if (user && !isLoginEmailAllowed(user.email)) {
+    setAuthErrorMessage(getLoginDomainRestrictionMessage(user.email))
+
+    try {
+      await signOutUser()
+    } catch {
+      // No-op: route guard still blocks access when domain is not allowed.
+    }
+
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
 
   if (user) {
     const hasProfile = hasCompletedUserProfile(user)

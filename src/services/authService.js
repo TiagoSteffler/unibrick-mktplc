@@ -44,15 +44,39 @@ export const isLoginDomainRestrictionEnabled = configuredLoginDomains.length > 0
 
 let initPromise = null
 
+function resolveUserEmail(user) {
+  const primaryEmail = String(user?.email || '').trim().toLowerCase()
+
+  if (primaryEmail) {
+    return primaryEmail
+  }
+
+  if (!Array.isArray(user?.providerData)) {
+    return ''
+  }
+
+  for (const providerItem of user.providerData) {
+    const candidate = String(providerItem?.email || '').trim().toLowerCase()
+
+    if (candidate) {
+      return candidate
+    }
+  }
+
+  return ''
+}
+
 function mapUser(user) {
   if (!user) {
     return null
   }
 
+  const resolvedEmail = resolveUserEmail(user)
+
   return {
     uid: user.uid,
     displayName: user.displayName || 'Usuario',
-    email: user.email || '',
+    email: resolvedEmail,
     photoURL: user.photoURL || '',
   }
 }
@@ -123,28 +147,54 @@ function getEmailDomain(email) {
   return normalized.slice(atIndex + 1)
 }
 
-function shouldRejectByDomain(email) {
+export function isLoginEmailAllowed(email) {
+  if (!isLoginDomainRestrictionEnabled) {
+    return true
+  }
+
+  return configuredLoginDomains.includes(getEmailDomain(email))
+}
+
+function shouldRejectByDomain(user) {
   if (!isLoginDomainRestrictionEnabled) {
     return false
   }
 
-  return !configuredLoginDomains.includes(getEmailDomain(email))
+  return !isLoginEmailAllowed(resolveUserEmail(user))
 }
 
-function getDomainRestrictionMessage() {
+function getDomainRestrictionMessage(email = '') {
+  const attemptedDomain = getEmailDomain(email)
+
   if (configuredLoginDomains.length === 1) {
-    return `Use um email do dominio @${configuredLoginDomains[0]}.`
+    const baseMessage = `Use um email do dominio @${configuredLoginDomains[0]}.`
+    return attemptedDomain
+      ? `${baseMessage} Dominio recebido: @${attemptedDomain}.`
+      : baseMessage
   }
 
-  return `Use um email de um dos dominios permitidos: ${allowedLoginDomainsText}.`
+  const baseMessage = `Use um email de um dos dominios permitidos: ${allowedLoginDomainsText}.`
+  return attemptedDomain
+    ? `${baseMessage} Dominio recebido: @${attemptedDomain}.`
+    : baseMessage
+}
+
+export function getLoginDomainRestrictionMessage(email = '') {
+  return getDomainRestrictionMessage(email)
+}
+
+export function setAuthErrorMessage(message) {
+  authError.value = String(message || '').trim()
 }
 
 async function applyDomainRestrictionOrSignOut(user) {
-  if (!shouldRejectByDomain(user?.email)) {
+  const resolvedEmail = resolveUserEmail(user)
+
+  if (!shouldRejectByDomain(user)) {
     return mapUser(user)
   }
 
-  authError.value = getDomainRestrictionMessage()
+  authError.value = getDomainRestrictionMessage(resolvedEmail)
 
   try {
     await signOut(auth)
@@ -168,7 +218,7 @@ export function initAuth() {
   initPromise = new Promise((resolve) => {
     if (isFirebaseConfigured && auth) {
       onAuthStateChanged(auth, async (user) => {
-        if (user && shouldRejectByDomain(user.email)) {
+        if (user && shouldRejectByDomain(user)) {
           await applyDomainRestrictionOrSignOut(user)
           authReady.value = true
           resolve(authState.value)
