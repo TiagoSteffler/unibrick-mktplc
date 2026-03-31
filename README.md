@@ -77,7 +77,6 @@ VITE_FIREBASE_STORAGE_BUCKET=...
 VITE_FIREBASE_MESSAGING_SENDER_ID=...
 VITE_FIREBASE_APP_ID=...
 VITE_ALLOWED_LOGIN_DOMAIN=example.edu,students.example.edu
-VITE_FIREBASE_AUTH_FLOW=redirect
 ```
 
 Observacoes sobre VITE_ALLOWED_LOGIN_DOMAIN:
@@ -86,13 +85,7 @@ Observacoes sobre VITE_ALLOWED_LOGIN_DOMAIN:
 - Para restringir, use dominio sem @.
 - Para mais de um dominio, separe por virgula, ponto e virgula ou espaco.
 - Exemplo: example.edu,students.example.edu
-- O app usa redirecionamento no login (sem popup) e valida o dominio no retorno.
-
-Observacoes sobre VITE_FIREBASE_AUTH_FLOW:
-
-- redirect (padrao): evita popup, melhor para mobile.
-- popup: volta ao fluxo original em janela popup.
-- Se o navegador mostrar erro no redirect (ex.: "The requested action is invalid"), teste popup como contingencia.
+- O app usa login com Google via popup e valida o dominio permitido apos autenticar.
 
 ### Restricao de dominio no Firebase (recomendado)
 
@@ -145,7 +138,6 @@ No repositorio GitHub, configure os Secrets:
 - VITE_FIREBASE_MESSAGING_SENDER_ID
 - VITE_FIREBASE_APP_ID
 - VITE_ALLOWED_LOGIN_DOMAIN (opcional; aceita lista separada por virgula)
-- VITE_FIREBASE_AUTH_FLOW (opcional: redirect ou popup)
 
 Depois:
 
@@ -153,33 +145,15 @@ Depois:
 2. Em GitHub Settings > Pages, selecione GitHub Actions.
 3. Aguarde o workflow concluir.
 
-### Troubleshooting rapido de login redirect
+### Troubleshooting rapido de login popup
 
-Se aparecer uma tela em branco com "The requested action is invalid":
+Se o navegador bloquear o popup de login:
 
+1. Permita popups para o endereco local do app (localhost).
 1. Confirme em Firebase Authentication > Settings > Authorized domains.
-
-Dominios minimos:
-
-- localhost
-- 127.0.0.1
-- seu dominio de producao (ex.: seuusuario.github.io)
-
+Dominios minimos: localhost, 127.0.0.1 e seu dominio de producao (ex.: seuusuario.github.io).
 1. Confirme em Authentication > Sign-in method que Google esta ativado.
-
-1. Se usar credenciais OAuth proprias no Google provider, valide o redirect URI.
-
-URI esperado:
-
-- https://SEU_AUTH_DOMAIN/__/auth/handler
-
 1. Reinicie o npm run dev apos mudar variaveis .env.
-
-1. Como contingencia, troque para popup no .env.
-
-Valor:
-
-- VITE_FIREBASE_AUTH_FLOW=popup
 
 ## Parte 7: Firestore (opcional agora, recomendado em seguida)
 

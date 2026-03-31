@@ -83,7 +83,7 @@ async function handleLogout() {
     <article class="card auth-card">
       <h1>Entrar no Marketplace</h1>
       <p class="muted" v-if="isFirebaseConfigured">
-        Firebase ativo: login com Google via Auth real.
+        Firebase ativo: login com Google via popup.
       </p>
       <p class="muted" v-if="isFirebaseConfigured && isLoginDomainRestrictionEnabled">
         Login restrito para emails de: {{ allowedLoginDomainsText }}.
@@ -100,7 +100,7 @@ async function handleLogout() {
           :disabled="isSigningIn"
           @click="handleLogin"
         >
-          {{ isSigningIn ? 'Redirecionando para Google...' : 'Entrar com Google' }}
+          {{ isSigningIn ? 'Abrindo popup do Google...' : 'Entrar com Google' }}
         </button>
       </div>
       <div v-else class="stack-sm">

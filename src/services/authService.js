@@ -2,19 +2,15 @@ import { ref } from 'vue'
 import {
   GoogleAuthProvider,
   deleteUser,
-  getRedirectResult,
   onAuthStateChanged,
   reauthenticateWithPopup,
   signInWithPopup,
-  signInWithRedirect,
   signOut,
 } from 'firebase/auth'
 import { auth, isFirebaseConfigured } from '../firebase/config'
 
 const MOCK_USER_KEY = 'marketplace_mock_user'
 const DOMAIN_PLACEHOLDER = 'example.edu'
-const AUTH_FLOW_POPUP = 'popup'
-const AUTH_FLOW_REDIRECT = 'redirect'
 
 function parseAllowedLoginDomains(rawValue) {
   const normalized = String(rawValue || '').trim().toLowerCase()
@@ -34,28 +30,13 @@ function parseAllowedLoginDomains(rawValue) {
 }
 
 const configuredLoginDomains = parseAllowedLoginDomains(import.meta.env.VITE_ALLOWED_LOGIN_DOMAIN)
-const configuredAuthFlow = String(import.meta.env.VITE_FIREBASE_AUTH_FLOW || AUTH_FLOW_REDIRECT)
-  .trim()
-  .toLowerCase()
-
-function resolveAuthFlow(value) {
-  if (value === AUTH_FLOW_POPUP) {
-    return AUTH_FLOW_POPUP
-  }
-
-  return AUTH_FLOW_REDIRECT
-}
-
-const selectedAuthFlow = resolveAuthFlow(configuredAuthFlow)
 
 export const authState = ref(null)
 export const authReady = ref(false)
 export const authError = ref('')
-export const authFlow = selectedAuthFlow
 export const allowedLoginDomains = configuredLoginDomains.length
   ? configuredLoginDomains
   : [DOMAIN_PLACEHOLDER]
-export const allowedLoginDomain = allowedLoginDomains[0]
 export const allowedLoginDomainsText = allowedLoginDomains
   .map((domain) => `@${domain}`)
   .join(', ')
@@ -123,7 +104,7 @@ function getFriendlyAuthErrorMessage(error) {
   }
 
   if (code === 'auth/popup-blocked') {
-    return 'O navegador bloqueou o popup de login. Tente modo redirect ou permita popups para este site.'
+    return 'O navegador bloqueou o popup de login. Permita popups para este site e tente novamente.'
   }
 
   return error instanceof Error
@@ -186,10 +167,6 @@ export function initAuth() {
 
   initPromise = new Promise((resolve) => {
     if (isFirebaseConfigured && auth) {
-      getRedirectResult(auth).catch((err) => {
-        authError.value = getFriendlyAuthErrorMessage(err)
-      })
-
       onAuthStateChanged(auth, async (user) => {
         if (user && shouldRejectByDomain(user.email)) {
           await applyDomainRestrictionOrSignOut(user)
@@ -246,31 +223,21 @@ export async function signInWithGoogle() {
 
     provider.setCustomParameters(providerParams)
 
-    if (selectedAuthFlow === AUTH_FLOW_POPUP) {
-      try {
-        const result = await signInWithPopup(auth, provider)
-        const validatedUser = await applyDomainRestrictionOrSignOut(result.user)
-
-        authState.value = validatedUser
-
-        if (validatedUser) {
-          clearAuthError()
-        }
-
-        return validatedUser
-      } catch (err) {
-        authError.value = getFriendlyAuthErrorMessage(err)
-        return null
-      }
-    }
-
     try {
-      await signInWithRedirect(auth, provider)
+      const result = await signInWithPopup(auth, provider)
+      const validatedUser = await applyDomainRestrictionOrSignOut(result.user)
+
+      authState.value = validatedUser
+
+      if (validatedUser) {
+        clearAuthError()
+      }
+
+      return validatedUser
     } catch (err) {
       authError.value = getFriendlyAuthErrorMessage(err)
+      return null
     }
-
-    return null
   }
 
   clearAuthError()
