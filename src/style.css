@@ -318,6 +318,18 @@ select {
   color: #0f4a59;
 }
 
+.required-indicator {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.required-fields-hint {
+  margin-top: 6px;
+  margin-bottom: 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
 .status-message {
   margin-top: 10px;
 }

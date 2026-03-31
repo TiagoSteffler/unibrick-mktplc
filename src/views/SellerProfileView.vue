@@ -62,8 +62,12 @@ onMounted(() => {
         <div class="seller-info">
           <h1>{{ seller.name }}</h1>
           <p><strong>Cidade natal:</strong> {{ seller.city || 'Nao informado' }}</p>
+          <p><strong>Curso/Ocupacao:</strong> {{ seller.universityRole || 'Nao informado' }}</p>
           <p><strong>Desde:</strong> {{ formatDate(seller.joinedAt) }}</p>
-          <p><strong>Sobre mim:</strong> {{ seller.about || 'Nao Disponivel' }}</p>
+          <p class="seller-about-row">
+            <strong>Sobre mim:</strong>
+            <span class="about-text">{{ seller.about || 'Nao Disponivel' }}</span>
+          </p>
         </div>
       </div>
     </article>
@@ -94,18 +98,20 @@ p {
 }
 
 .seller-profile-head {
+  padding: 16px 30px;
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 1fr minmax(0, 4fr);
+  gap: 30px;
   align-items: start;
+  height:auto;
 }
 
 .seller-avatar-container {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 120px;
-  height: 120px;
+    height: 100%;
+  aspect-ratio: 1;
 }
 
 .seller-avatar {
@@ -135,6 +141,15 @@ p {
 .seller-info {
   display: grid;
   gap: 4px;
+}
+
+.seller-about-row {
+  display: grid;
+  gap: 2px;
+}
+
+.about-text {
+  white-space: pre-line;
 }
 
 .seller-products-head {

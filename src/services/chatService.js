@@ -40,6 +40,26 @@ function nowIso() {
   return new Date().toISOString()
 }
 
+function normalizeTopicProduct(data) {
+  if (!data || typeof data !== 'object') {
+    return null
+  }
+
+  const productId = String(data.productId || '').trim()
+  const title = String(data.title || '').trim()
+  const buyerId = String(data.buyerId || '').trim()
+
+  if (!productId || !title || !buyerId) {
+    return null
+  }
+
+  return {
+    productId,
+    title,
+    buyerId,
+  }
+}
+
 function normalizeConversation(data) {
   return {
     id: String(data.id || ''),
@@ -52,18 +72,23 @@ function normalizeConversation(data) {
     updatedAt: data.updatedAt || nowIso(),
     lastMessagePreview: String(data.lastMessagePreview || ''),
     unreadCounts: typeof data.unreadCounts === 'object' && data.unreadCounts ? data.unreadCounts : {},
+    topicProduct: normalizeTopicProduct(data.topicProduct),
   }
 }
 
 function normalizeMessage(data) {
   return {
     id: String(data.id || ''),
+    kind: data.kind === 'topic-intro' ? 'topic-intro' : 'text',
     conversationId: String(data.conversationId || ''),
     senderId: String(data.senderId || ''),
     senderName: String(data.senderName || ''),
     text: String(data.text || ''),
     createdAt: data.createdAt || nowIso(),
     attachment: data.attachment || null,
+    topicProductId: String(data.topicProductId || ''),
+    topicProductTitle: String(data.topicProductTitle || ''),
+    topicBuyerId: String(data.topicBuyerId || ''),
   }
 }
 
@@ -76,7 +101,9 @@ function getSystemConversationId(userId) {
   return `system_${UNI_BRIK_ID}_${String(userId)}`
 }
 
-function createDirectConversationBase(currentUser, otherUser, createdAt = nowIso()) {
+function createDirectConversationBase(currentUser, otherUser, createdAt = nowIso(), topicProduct = null) {
+  const normalizedTopic = normalizeTopicProduct(topicProduct)
+
   return normalizeConversation({
     id: getDirectConversationId(currentUser.uid, otherUser.id),
     type: 'direct',
@@ -85,7 +112,7 @@ function createDirectConversationBase(currentUser, otherUser, createdAt = nowIso
     participantProfiles: {
       [currentUser.uid]: {
         name: currentUser.displayName || 'Usuario',
-        photoURL: currentUser.photoURL || '',
+        photoURL: '',
       },
       [otherUser.id]: {
         name: otherUser.name || 'Vendedor',
@@ -99,6 +126,7 @@ function createDirectConversationBase(currentUser, otherUser, createdAt = nowIso
       [currentUser.uid]: 0,
       [otherUser.id]: 0,
     },
+    topicProduct: normalizedTopic,
   })
 }
 
@@ -227,12 +255,13 @@ export async function getConversationMessages(conversationId) {
   return messages.map(normalizeMessage).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 }
 
-export async function ensureDirectConversation(currentUser, otherUser) {
+export async function ensureDirectConversation(currentUser, otherUser, options = {}) {
   if (!currentUser || !otherUser?.id) {
     throw new Error('Dados de conversa invalidos.')
   }
 
-  const baseConversation = createDirectConversationBase(currentUser, otherUser)
+  const topicProduct = normalizeTopicProduct(options.topicProduct)
+  const baseConversation = createDirectConversationBase(currentUser, otherUser, nowIso(), topicProduct)
   const conversationId = baseConversation.id
 
   if (isFirebaseConfigured && db) {
@@ -244,17 +273,39 @@ export async function ensureDirectConversation(currentUser, otherUser) {
       return baseConversation
     }
 
-    return normalizeConversation({
+    const existingConversation = normalizeConversation({
       id: snapshot.id,
       ...snapshot.data(),
     })
+
+    if (topicProduct && !existingConversation.topicProduct) {
+      await setDoc(reference, { topicProduct }, { merge: true })
+      return normalizeConversation({
+        ...existingConversation,
+        topicProduct,
+      })
+    }
+
+    return existingConversation
   }
 
   const conversations = readConversationsLocal()
-  const existing = conversations.find((item) => item.id === conversationId)
+  const existingIndex = conversations.findIndex((item) => item.id === conversationId)
 
-  if (existing) {
-    return normalizeConversation(existing)
+  if (existingIndex >= 0) {
+    const existingConversation = normalizeConversation(conversations[existingIndex])
+
+    if (topicProduct && !existingConversation.topicProduct) {
+      const nextConversation = normalizeConversation({
+        ...existingConversation,
+        topicProduct,
+      })
+      conversations[existingIndex] = nextConversation
+      saveConversationsLocal(conversations)
+      return nextConversation
+    }
+
+    return existingConversation
   }
 
   conversations.push(baseConversation)
@@ -407,6 +458,28 @@ export async function sendChatMessage(user, conversation, payload) {
   }
 
   const createdAt = nowIso()
+  const topicIntro = normalizeTopicProduct(payload?.topicIntro)
+  const shouldCreateTopicIntro = Boolean(topicIntro && topicIntro.buyerId === user.uid)
+  const topicCreatedAt = shouldCreateTopicIntro
+    ? new Date(new Date(createdAt).getTime() - 1).toISOString()
+    : ''
+
+  const topicMessage = shouldCreateTopicIntro
+    ? normalizeMessage({
+        id: `topic-${Date.now()}`,
+        kind: 'topic-intro',
+        conversationId: conversation.id,
+        senderId: topicIntro.buyerId,
+        senderName: user.displayName || 'Usuario',
+        text: '',
+        attachment: null,
+        createdAt: topicCreatedAt,
+        topicProductId: topicIntro.productId,
+        topicProductTitle: topicIntro.title,
+        topicBuyerId: topicIntro.buyerId,
+      })
+    : null
+
   const message = normalizeMessage({
     id: `msg-${Date.now()}`,
     conversationId: conversation.id,
@@ -421,6 +494,7 @@ export async function sendChatMessage(user, conversation, payload) {
 
   const updatedConversation = normalizeConversation({
     ...conversation,
+    topicProduct: conversation.topicProduct || topicIntro || null,
     updatedAt: createdAt,
     lastMessagePreview: preview,
     unreadCounts: {
@@ -445,18 +519,41 @@ export async function sendChatMessage(user, conversation, payload) {
       { merge: true },
     )
 
+    if (topicMessage) {
+      await addDoc(collection(db, CONVERSATIONS_COLLECTION, conversation.id, 'messages'), {
+        kind: topicMessage.kind,
+        senderId: topicMessage.senderId,
+        senderName: topicMessage.senderName,
+        text: topicMessage.text,
+        createdAt: topicMessage.createdAt,
+        attachment: topicMessage.attachment,
+        topicProductId: topicMessage.topicProductId,
+        topicProductTitle: topicMessage.topicProductTitle,
+        topicBuyerId: topicMessage.topicBuyerId,
+      })
+    }
+
     await addDoc(collection(db, CONVERSATIONS_COLLECTION, conversation.id, 'messages'), {
+      kind: message.kind,
       senderId: message.senderId,
       senderName: message.senderName,
       text: message.text,
       createdAt: message.createdAt,
       attachment: message.attachment,
+      topicProductId: message.topicProductId,
+      topicProductTitle: message.topicProductTitle,
+      topicBuyerId: message.topicBuyerId,
     })
 
     return message
   }
 
   upsertConversationLocal(updatedConversation)
+
+  if (topicMessage) {
+    pushMessageLocal(conversation.id, topicMessage)
+  }
+
   pushMessageLocal(conversation.id, message)
 
   return message

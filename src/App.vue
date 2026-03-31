@@ -2,13 +2,26 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authState } from './services/authService'
+import { getUserProfile } from './services/marketplaceService'
 import appLogo from './assets/blue-logo-1-CDTEx3Yb.png'
 
 const router = useRouter()
 const route = useRoute()
 const headerSearch = ref('')
 const isAuthenticated = computed(() => Boolean(authState.value))
-const profilePhoto = computed(() => authState.value?.photoURL || '')
+const profilePhoto = computed(() => {
+  // Reavalia em mudancas de rota para refletir perfil sincronizado em background.
+  void route.fullPath
+
+  const currentUser = authState.value
+
+  if (!currentUser) {
+    return ''
+  }
+
+  const profile = getUserProfile(currentUser)
+  return profile?.photoURL || ''
+})
 const isProfileSetupFlow = computed(() => route.name === 'profile-setup')
 
 watch(

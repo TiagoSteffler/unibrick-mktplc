@@ -426,24 +426,73 @@ function removeProductFromAllFavorites(productId) {
   }
 }
 
-function sellerFromUser(user) {
-  const registered = getUserProfile(user)
+function getStoredUserProfile(userId) {
+  if (!userId) {
+    return null
+  }
+
+  const profiles = readUserProfiles()
+  return profiles[userId] || null
+}
+
+function getPreferredUserIdentity(user) {
+  if (!user) {
+    return {
+      displayName: 'Vendedor',
+      photoURL: '',
+    }
+  }
+
+  const stored = getStoredUserProfile(user.uid)
+  const normalizedStored = stored ? normalizeUserProfile(stored, user) : null
+
+  return {
+    displayName: normalizedStored?.fullName || user.displayName || 'Vendedor',
+    photoURL: normalizedStored?.photoURL || '',
+  }
+}
+
+function toSellerSummary(sellerId, profile, fallback = {}) {
+  const now = new Date().toISOString().slice(0, 10)
+
+  return {
+    id: sellerId,
+    name: String(profile?.fullName || fallback.displayName || fallback.name || 'Vendedor').trim() ||
+      'Vendedor',
+    photoURL: String(profile?.photoURL || fallback.photoURL || '').trim(),
+    city: String(profile?.hometown || fallback.hometown || fallback.city || '').trim() ||
+      'Nao informado',
+    joinedAt: String(profile?.createdAt || fallback.joinedAt || now),
+    about: String(profile?.aboutMe || fallback.about || '').trim() || 'Nao Disponivel',
+    universityRole: String(profile?.universityRole || '').trim(),
+  }
+}
+
+function toMyProfileData(user, normalizedProfile) {
+  const now = new Date().toISOString().slice(0, 10)
 
   return {
     id: user.uid,
-    name: registered?.fullName || user.displayName || 'Meu Perfil',
-    photoURL: registered?.photoURL || user.photoURL || '',
-    city: registered?.hometown || 'Nao informado',
-    joinedAt: registered?.createdAt || new Date().toISOString().slice(0, 10),
-    about: registered?.aboutMe || 'Nao Disponivel',
-    email: user.email || '',
-    gender: registered?.gender || '',
-    neighborhood: registered?.neighborhood || '',
-    hometown: registered?.hometown || '',
-    aboutMe: registered?.aboutMe || '',
-    fullName: registered?.fullName || user.displayName || '',
-    createdAt: registered?.createdAt || new Date().toISOString().slice(0, 10),
+    name: normalizedProfile?.fullName || user.displayName || 'Meu Perfil',
+    photoURL: normalizedProfile?.photoURL || '',
+    city: normalizedProfile?.hometown || 'Nao informado',
+    joinedAt: normalizedProfile?.createdAt || now,
+    about: normalizedProfile?.aboutMe || 'Nao Disponivel',
+    email: normalizedProfile?.email || user.email || '',
+    gender: normalizedProfile?.gender || '',
+    neighborhood: normalizedProfile?.neighborhood || '',
+    hometown: normalizedProfile?.hometown || '',
+    universityRole: normalizedProfile?.universityRole || '',
+    aboutMe: normalizedProfile?.aboutMe || '',
+    fullName: normalizedProfile?.fullName || user.displayName || '',
+    createdAt: normalizedProfile?.createdAt || now,
   }
+}
+
+function sellerFromUser(user) {
+  const registered = getUserProfile(user)
+
+  return toMyProfileData(user, registered)
 }
 
 function getSuggestedName(user) {
@@ -469,24 +518,36 @@ function isProfileComplete(profile) {
     String(profile.fullName || '').trim() &&
       String(profile.gender || '').trim() &&
       String(profile.neighborhood || '').trim() &&
+      String(profile.universityRole || '').trim() &&
       String(profile.hometown || '').trim() &&
       String(profile.email || '').trim(),
   )
 }
 
+function cacheNormalizedUserProfile(userId, profile) {
+  if (!userId || !profile) {
+    return
+  }
+
+  const profiles = readUserProfiles()
+  profiles[userId] = profile
+  saveUserProfiles(profiles)
+}
+
 function normalizeUserProfile(profile, user) {
-  const email = user?.email || ''
+  const email = String(profile?.email || user?.email || '').trim()
   const now = new Date().toISOString().slice(0, 10)
 
   return {
     fullName: String(profile?.fullName || getSuggestedName(user)).trim(),
     gender: String(profile?.gender || '').trim(),
     neighborhood: String(profile?.neighborhood || '').trim(),
+    universityRole: String(profile?.universityRole || '').trim(),
     hometown: String(profile?.hometown || '').trim(),
     aboutMe: String(profile?.aboutMe || '')
       .trim()
       .slice(0, 300),
-    photoURL: String(profile?.photoURL || user?.photoURL || '').trim(),
+    photoURL: String(profile?.photoURL || '').trim(),
     email,
     createdAt: String(profile?.createdAt || now),
     updatedAt: new Date().toISOString(),
@@ -501,6 +562,24 @@ function saveUserProfiles(profiles) {
   safeWrite(USER_PROFILE_KEY, profiles)
 }
 
+function withTimeout(promise, timeoutMs, timeoutMessage) {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(timeoutMessage || 'Tempo limite excedido.'))
+    }, timeoutMs)
+
+    Promise.resolve(promise)
+      .then((result) => {
+        clearTimeout(timeoutId)
+        resolve(result)
+      })
+      .catch((err) => {
+        clearTimeout(timeoutId)
+        reject(err)
+      })
+  })
+}
+
 async function uploadUserProfilePhoto(photoData, userId) {
   if (!storage) {
     throw new Error('Storage do Firebase nao esta configurado.')
@@ -512,15 +591,31 @@ async function uploadUserProfilePhoto(photoData, userId) {
   }
 
   // Converter data URL para Blob
-  const response = await fetch(photoData)
-  const blob = await response.blob()
+  const response = await withTimeout(
+    fetch(photoData),
+    10000,
+    'Tempo limite ao processar a foto de perfil.',
+  )
+  const blob = await withTimeout(
+    response.blob(),
+    10000,
+    'Tempo limite ao processar a foto de perfil.',
+  )
 
   const path = `user_profiles/${userId}.jpg`
   const storageRef = ref(storage, path)
 
   try {
-    await uploadBytes(storageRef, blob)
-    return getDownloadURL(storageRef)
+    await withTimeout(
+      uploadBytes(storageRef, blob),
+      15000,
+      'Tempo limite no upload da foto de perfil.',
+    )
+    return withTimeout(
+      getDownloadURL(storageRef),
+      10000,
+      'Tempo limite ao obter URL da foto de perfil.',
+    )
   } catch (primaryError) {
     const hasFirestoreDomainBucket = firebaseStorageBucket.endsWith('.firebasestorage.app')
     const fallbackBucket = firebaseProjectId ? `${firebaseProjectId}.appspot.com` : ''
@@ -535,8 +630,18 @@ async function uploadUserProfilePhoto(photoData, userId) {
     }
 
     const fallbackStorage = getStorage(app, `gs://${fallbackBucket}`)
-    await uploadBytes(ref(fallbackStorage, path), blob)
-    return getDownloadURL(ref(fallbackStorage, path))
+    const fallbackRef = ref(fallbackStorage, path)
+
+    await withTimeout(
+      uploadBytes(fallbackRef, blob),
+      15000,
+      'Tempo limite no upload da foto de perfil.',
+    )
+    return withTimeout(
+      getDownloadURL(fallbackRef),
+      10000,
+      'Tempo limite ao obter URL da foto de perfil.',
+    )
   }
 }
 
@@ -550,8 +655,31 @@ export function getUserProfile(user) {
   return normalizeUserProfile(stored, user)
 }
 
-export function hasCompletedUserProfile(user) {
-  return isProfileComplete(getUserProfile(user))
+export function isUserProfileComplete(profile) {
+  return isProfileComplete(profile)
+}
+
+export async function hasCompletedUserProfile(user) {
+  if (!user) {
+    return false
+  }
+
+  const localProfile = getUserProfile(user)
+
+  if (isProfileComplete(localProfile)) {
+    return true
+  }
+
+  const firestoreProfile = await getUserProfileFromFirestore(user.uid)
+
+  if (!firestoreProfile) {
+    return false
+  }
+
+  const normalizedFirestoreProfile = normalizeUserProfile(firestoreProfile, user)
+  cacheNormalizedUserProfile(user.uid, normalizedFirestoreProfile)
+
+  return isProfileComplete(normalizedFirestoreProfile)
 }
 
 export async function saveUserProfile(user, payload) {
@@ -559,16 +687,18 @@ export async function saveUserProfile(user, payload) {
     throw new Error('Usuario nao autenticado')
   }
 
-  let processedPhotoURL = payload.photoURL || ''
+  let processedPhotoURL = String(payload.photoURL || '').trim()
 
   // Se Firestore está configurado, fazer upload de foto se necessário
-  if (isFirebaseConfigured && db && String(processedPhotoURL).startsWith('data:')) {
+  if (isFirebaseConfigured && db && isDataUrlPhoto(processedPhotoURL)) {
     try {
-      processedPhotoURL = await uploadUserProfilePhoto(processedPhotoURL, user.uid)
-    } catch (err) {
-      throw new Error(
-        'Falha ao fazer upload da foto de perfil. Verifique a configuração do Firebase Storage.',
+      processedPhotoURL = await withTimeout(
+        uploadUserProfilePhoto(processedPhotoURL, user.uid),
+        18000,
+        'Tempo limite no upload da foto de perfil.',
       )
+    } catch (err) {
+      console.warn('Falha no upload da foto de perfil. Mantendo foto local em base64.', err)
     }
   }
 
@@ -578,7 +708,7 @@ export async function saveUserProfile(user, payload) {
     ...current,
     ...payload,
     photoURL: processedPhotoURL,
-    email: user.email || '',
+    email: user.email || current.email || '',
   }
 
   const normalized = normalizeUserProfile(merged, user)
@@ -587,22 +717,51 @@ export async function saveUserProfile(user, payload) {
 
   // Salvar no Firestore também
   if (isFirebaseConfigured && db) {
+    const userProfileRef = doc(db, USER_PROFILES_COLLECTION, user.uid)
+    const firestorePayload = {
+      fullName: normalized.fullName,
+      gender: normalized.gender,
+      neighborhood: normalized.neighborhood,
+      universityRole: normalized.universityRole,
+      hometown: normalized.hometown,
+      aboutMe: normalized.aboutMe,
+      photoURL: normalized.photoURL,
+      email: normalized.email,
+      createdAt: normalized.createdAt,
+      updatedAt: normalized.updatedAt,
+    }
+
     try {
-      const userProfileRef = doc(db, USER_PROFILES_COLLECTION, user.uid)
-      await setDoc(userProfileRef, {
-        fullName: normalized.fullName,
-        gender: normalized.gender,
-        neighborhood: normalized.neighborhood,
-        hometown: normalized.hometown,
-        aboutMe: normalized.aboutMe,
-        photoURL: normalized.photoURL,
-        email: normalized.email,
-        createdAt: normalized.createdAt,
-        updatedAt: normalized.updatedAt,
-      })
+      await withTimeout(
+        setDoc(userProfileRef, firestorePayload),
+        12000,
+        'Tempo limite ao salvar perfil no Firestore.',
+      )
     } catch (err) {
-      // Não falhar se Firestore não funcionar, usar localStorage como fallback
-      console.warn('Falha ao salvar perfil no Firestore:', err)
+      const shouldRetryWithoutInlinePhoto = isDataUrlPhoto(firestorePayload.photoURL)
+
+      if (!shouldRetryWithoutInlinePhoto) {
+        // Não falhar se Firestore não funcionar, usar localStorage como fallback
+        console.warn('Falha ao salvar perfil no Firestore:', err)
+      } else {
+        try {
+          await withTimeout(
+            setDoc(userProfileRef, {
+              ...firestorePayload,
+              photoURL: '',
+            }),
+            12000,
+            'Tempo limite ao salvar perfil no Firestore.',
+          )
+          console.warn(
+            'Perfil salvo no Firestore sem foto inline porque o documento excedeu o limite permitido.',
+            err,
+          )
+        } catch (retryErr) {
+          // Não falhar se Firestore não funcionar, usar localStorage como fallback
+          console.warn('Falha ao salvar perfil no Firestore:', retryErr)
+        }
+      }
     }
   }
 
@@ -667,17 +826,28 @@ export async function getSellerById(sellerId) {
     }
   }
 
+  const localProfile = getStoredUserProfile(sellerId)
+
+  if (localProfile) {
+    const normalizedLocalProfile = normalizeUserProfile(localProfile, {
+      displayName: localProfile.fullName || 'Vendedor',
+      email: localProfile.email || '',
+      photoURL: localProfile.photoURL || '',
+    })
+
+    return toSellerSummary(sellerId, normalizedLocalProfile)
+  }
+
   // Tentar buscar do Firestore
   const firestoreProfile = await getUserProfileFromFirestore(sellerId)
   if (firestoreProfile) {
-    return {
-      id: sellerId,
-      name: firestoreProfile.fullName || 'Vendedor',
+    const normalizedFirestoreProfile = normalizeUserProfile(firestoreProfile, {
+      displayName: firestoreProfile.fullName || 'Vendedor',
+      email: firestoreProfile.email || '',
       photoURL: firestoreProfile.photoURL || '',
-      city: firestoreProfile.hometown || 'Nao informado',
-      joinedAt: firestoreProfile.createdAt || new Date().toISOString().slice(0, 10),
-      about: firestoreProfile.aboutMe || 'Nao Disponivel',
-    }
+    })
+
+    return toSellerSummary(sellerId, normalizedFirestoreProfile)
   }
 
   return (await getSellerPreviewById(sellerId)) || null
@@ -692,6 +862,10 @@ export async function createProduct(payload, user) {
     throw new Error('Usuario nao autenticado')
   }
 
+  const sellerIdentity = getPreferredUserIdentity(user)
+  const sellerPhotoForDocuments = isDataUrlPhoto(sellerIdentity.photoURL)
+    ? ''
+    : sellerIdentity.photoURL
   const hasFiles = Array.isArray(payload.photoFiles) && payload.photoFiles.length > 0
   let photos = normalizePhotoList(payload.photos)
   const validPrice = validateProductPrice(payload.price)
@@ -720,8 +894,8 @@ export async function createProduct(payload, user) {
       deliveryOptions: payload.deliveryOptions,
       retrievalLocation: payload.retrievalLocation,
       sellerId: user.uid,
-      sellerName: user.displayName || 'Vendedor',
-      sellerPhotoURL: user.photoURL || '',
+      sellerName: sellerIdentity.displayName,
+      sellerPhotoURL: sellerPhotoForDocuments,
       createdAt: new Date().toISOString().slice(0, 10),
     })
 
@@ -759,6 +933,8 @@ export async function createProduct(payload, user) {
     deliveryOptions: payload.deliveryOptions,
     retrievalLocation: payload.retrievalLocation,
     sellerId: user.uid,
+    sellerName: sellerIdentity.displayName,
+    sellerPhotoURL: sellerIdentity.photoURL,
     createdAt: new Date().toISOString().slice(0, 10),
   })
 
@@ -773,6 +949,10 @@ export async function updateProduct(productId, payload, user) {
     throw new Error('Usuario nao autenticado')
   }
 
+  const sellerIdentity = getPreferredUserIdentity(user)
+  const sellerPhotoForDocuments = isDataUrlPhoto(sellerIdentity.photoURL)
+    ? ''
+    : sellerIdentity.photoURL
   const hasFiles = Array.isArray(payload.photoFiles) && payload.photoFiles.length > 0
   let nextPhotos = normalizePhotoList(payload.photos)
   
@@ -827,8 +1007,8 @@ export async function updateProduct(productId, payload, user) {
       condition: payload.condition || current.condition,
       deliveryOptions: payload.deliveryOptions,
       retrievalLocation: payload.retrievalLocation,
-      sellerName: user.displayName || current.sellerName,
-      sellerPhotoURL: user.photoURL || current.sellerPhotoURL,
+      sellerName: sellerIdentity.displayName || current.sellerName,
+      sellerPhotoURL: sellerPhotoForDocuments || current.sellerPhotoURL,
     })
 
     await updateDoc(reference, {
@@ -884,6 +1064,8 @@ export async function updateProduct(productId, payload, user) {
     condition: payload.condition || current.condition,
     deliveryOptions: payload.deliveryOptions,
     retrievalLocation: payload.retrievalLocation,
+    sellerName: sellerIdentity.displayName || current.sellerName,
+    sellerPhotoURL: sellerIdentity.photoURL || current.sellerPhotoURL,
   })
 
   extra[index] = updated
@@ -949,24 +1131,19 @@ export async function getMyProfile(user) {
     return null
   }
 
+  const localProfile = getStoredUserProfile(user.uid)
+
+  if (localProfile) {
+    return toMyProfileData(user, normalizeUserProfile(localProfile, user))
+  }
+
   // Tentar buscar do Firestore primeiro
   const firestoreProfile = await getUserProfileFromFirestore(user.uid)
   if (firestoreProfile) {
-    return {
-      id: user.uid,
-      name: firestoreProfile.fullName || user.displayName || 'Meu Perfil',
-      photoURL: firestoreProfile.photoURL || user.photoURL || '',
-      city: firestoreProfile.hometown || 'Nao informado',
-      joinedAt: firestoreProfile.createdAt || new Date().toISOString().slice(0, 10),
-      about: firestoreProfile.aboutMe || 'Nao Disponivel',
-      email: firestoreProfile.email || user.email || '',
-      gender: firestoreProfile.gender || '',
-      neighborhood: firestoreProfile.neighborhood || '',
-      hometown: firestoreProfile.hometown || '',
-      aboutMe: firestoreProfile.aboutMe || '',
-      fullName: firestoreProfile.fullName || user.displayName || '',
-      createdAt: firestoreProfile.createdAt || new Date().toISOString().slice(0, 10),
-    }
+    const normalizedProfile = normalizeUserProfile(firestoreProfile, user)
+    cacheNormalizedUserProfile(user.uid, normalizedProfile)
+
+    return toMyProfileData(user, normalizedProfile)
   }
 
   // Fallback para dados locais/seed
@@ -1010,7 +1187,7 @@ export async function deleteUserMarketplaceData(user) {
     }
   }
 
-  const profilePhoto = String(currentProfile?.photoURL || user.photoURL || '').trim()
+  const profilePhoto = String(currentProfile?.photoURL || '').trim()
 
   if (profilePhoto) {
     await deletePhotoFromStorage(profilePhoto)

@@ -2,8 +2,10 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppModal from '../components/AppModal.vue'
+import { getBrazilianCities } from '../constants/brazilianCities'
 import { authState, updateAuthenticatedUserProfile } from '../services/authService'
 import { getUserProfile, saveUserProfile } from '../services/marketplaceService'
+import { optimizeMarketplaceImage } from '../utils/imageOptimizer'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,12 +19,15 @@ const showSuccessModal = ref(false)
 const successModalTitle = ref('')
 const successModalMessage = ref('')
 const redirectAfterSave = ref('/profile')
+const hometownOptions = ref([])
+const isLoadingHometownOptions = ref(false)
 
 const form = reactive({
   fullName: '',
   gender: '',
   neighborhood: '',
   hometown: '',
+  universityRole: '',
   aboutMe: '',
   photoURL: '',
   email: '',
@@ -38,21 +43,29 @@ function fillForm() {
   form.gender = profile?.gender || ''
   form.neighborhood = profile?.neighborhood || ''
   form.hometown = profile?.hometown || ''
+  form.universityRole = profile?.universityRole || ''
   form.aboutMe = profile?.aboutMe || ''
   form.photoURL = profile?.photoURL || ''
   form.email = user.value.email || ''
 }
 
-const isBusy = computed(() => isLoading.value || isSaving.value)
+async function loadHometownOptions() {
+  isLoadingHometownOptions.value = true
 
-function readFileAsDataURL(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('Falha ao ler o arquivo de imagem.'))
-    reader.readAsDataURL(file)
-  })
+  try {
+    const cities = await getBrazilianCities()
+    hometownOptions.value = cities
+
+    const currentValue = String(form.hometown || '').trim()
+    if (currentValue && !cities.includes(currentValue)) {
+      hometownOptions.value = [currentValue, ...cities]
+    }
+  } finally {
+    isLoadingHometownOptions.value = false
+  }
 }
+
+const isBusy = computed(() => isLoading.value || isSaving.value)
 
 async function handlePhotoUpload(event) {
   const [file] = event.target.files || []
@@ -64,9 +77,12 @@ async function handlePhotoUpload(event) {
   error.value = ''
 
   try {
-    form.photoURL = await readFileAsDataURL(file)
+    const optimized = await optimizeMarketplaceImage(file)
+    form.photoURL = optimized.previewDataUrl
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Falha ao enviar imagem.'
+  } finally {
+    event.target.value = ''
   }
 }
 
@@ -102,8 +118,15 @@ async function handleSubmit() {
     return
   }
 
-  if (!form.fullName.trim() || !form.gender || !form.neighborhood.trim() || !form.hometown.trim()) {
-    error.value = 'Preencha nome completo, sexo, bairro e cidade natal para continuar.'
+  const fullName = form.fullName.trim()
+  const gender = form.gender.trim()
+  const neighborhood = form.neighborhood.trim()
+  const hometown = form.hometown.trim()
+  const universityRole = form.universityRole.trim()
+
+  if (!fullName || !gender || !neighborhood || !hometown || !universityRole) {
+    error.value =
+      'Preencha nome completo, sexo, bairro, cidade natal e curso/ocupacao na universidade para continuar.'
     return
   }
 
@@ -113,10 +136,11 @@ async function handleSubmit() {
 
   try {
     const saved = await saveUserProfile(user.value, {
-      fullName: form.fullName,
-      gender: form.gender,
-      neighborhood: form.neighborhood,
-      hometown: form.hometown,
+      fullName,
+      gender,
+      neighborhood,
+      hometown,
+      universityRole,
       aboutMe: form.aboutMe,
       photoURL: form.photoURL,
     })
@@ -152,6 +176,10 @@ onMounted(() => {
   } finally {
     isLoading.value = false
   }
+
+  loadHometownOptions().catch(() => {
+    // O campo de cidade tem fallback local para manter o formulario funcional.
+  })
 })
 </script>
 
@@ -168,10 +196,11 @@ onMounted(() => {
       Informe seus dados para liberar as funcoes de perfil e anuncios.
       <span v-if="!isEditMode"> Concluir este cadastro e obrigatorio para continuar.</span>
     </p>
+    <p class="required-fields-hint">Campos com <strong class="required-indicator">*</strong> sao obrigatorios.</p>
 
     <form class="grid profile-form" @submit.prevent="handleSubmit" :aria-busy="isBusy">
       <label class="field">
-        <span>Nome completo</span>
+        <span>Nome completo <strong class="required-indicator">*</strong></span>
         <input
           v-model="form.fullName"
           type="text"
@@ -182,7 +211,7 @@ onMounted(() => {
       </label>
 
       <label class="field">
-        <span>Sexo</span>
+        <span>Sexo <strong class="required-indicator">*</strong></span>
         <select v-model="form.gender" required>
           <option disabled value="">Selecione</option>
           <option value="masc">Masculino</option>
@@ -192,7 +221,7 @@ onMounted(() => {
       </label>
 
       <label class="field">
-        <span>Bairro de residencia para retirada</span>
+        <span>Bairro de residencia para retirada <strong class="required-indicator">*</strong></span>
         <input
           v-model="form.neighborhood"
           type="text"
@@ -203,13 +232,36 @@ onMounted(() => {
       </label>
 
       <label class="field">
-        <span>Cidade natal</span>
+        <span>Cidade natal <strong class="required-indicator">*</strong></span>
         <input
           v-model="form.hometown"
           type="text"
           required
-          placeholder="Santa Maria/RS"
+          list="hometown-city-options"
+          :disabled="isLoadingHometownOptions"
+          placeholder="Digite para pesquisar (ex.: Santa Maria - RS)"
           autocomplete="address-level2"
+        />
+        <datalist id="hometown-city-options">
+          <option v-for="city in hometownOptions" :key="city" :value="city"></option>
+        </datalist>
+        <small class="muted">
+          {{
+            isLoadingHometownOptions
+              ? 'Carregando cidades do Brasil...'
+              : 'Digite para filtrar as opcoes. Formato sugerido: Cidade - UF.'
+          }}
+        </small>
+      </label>
+
+      <label class="field">
+        <span>Curso/Ocupacao na universidade <strong class="required-indicator">*</strong></span>
+        <input
+          v-model="form.universityRole"
+          type="text"
+          required
+          placeholder="Ex.: Engenharia de Software"
+          autocomplete="organization-title"
         />
       </label>
 

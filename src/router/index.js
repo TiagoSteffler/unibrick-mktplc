@@ -110,7 +110,7 @@ router.beforeEach(async (to) => {
   }
 
   if (user) {
-    const hasProfile = hasCompletedUserProfile(user)
+    const hasProfile = await hasCompletedUserProfile(user)
 
     if (!hasProfile && to.name !== 'profile-setup') {
       return { name: 'profile-setup', query: { redirect: to.fullPath } }

@@ -9,7 +9,7 @@ import {
   deleteUserMarketplaceData,
   getMyProducts,
   getMyProfile,
-  hasCompletedUserProfile,
+  isUserProfileComplete,
 } from '../services/marketplaceService'
 
 const router = useRouter()
@@ -21,7 +21,7 @@ const isLoading = ref(false)
 const isDeletingAccount = ref(false)
 const showDeleteAccountModal = ref(false)
 const accountActionError = ref('')
-const hasConfiguredProfile = computed(() => hasCompletedUserProfile(user.value))
+const hasConfiguredProfile = computed(() => (isLoading.value ? true : isUserProfileComplete(profile.value)))
 const highlightedMyProducts = computed(() => myProducts.value.slice(0, 3))
 const accountDeletionEffects = [
   'seus dados de perfil',
@@ -140,8 +140,12 @@ watch(
         <div class="my-info">
           <h1>{{ profile?.fullName || user.displayName || 'Meu perfil' }}</h1>
           <p><strong>Cidade natal:</strong> {{ profile?.city || 'Nao informado' }}</p>
+          <p><strong>Curso/Ocupacao:</strong> {{ profile?.universityRole || 'Nao informado' }}</p>
           <p><strong>Desde:</strong> {{ formatDate(profile?.joinedAt) }}</p>
-          <p><strong>Sobre mim:</strong> {{ profile?.about || 'Nao Disponivel' }}</p>
+          <p class="my-about-row">
+            <strong>Sobre mim:</strong>
+            <span class="about-text">{{ profile?.about || 'Nao Disponivel' }}</span>
+          </p>
 
           <p v-if="!hasConfiguredProfile" class="muted" style="margin-top: 6px">
             Complete seu cadastro para liberar edicao de perfil e uso completo da conta.
@@ -231,18 +235,21 @@ p {
 }
 
 .my-profile-head {
+  padding: 16px 30px;
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 1fr minmax(0, 4fr);
+  gap: 30px;
   align-items: start;
+  height:auto;
+  
 }
 
 .my-avatar-container {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 120px;
-  height: 120px;
+  height: 100%;
+  aspect-ratio: 1;
 }
 
 .my-avatar {
@@ -272,6 +279,15 @@ p {
 .my-info {
   display: grid;
   gap: 4px;
+}
+
+.my-about-row {
+  display: grid;
+  gap: 2px;
+}
+
+.about-text {
+  white-space: pre-line;
 }
 
 .my-profile-actions {

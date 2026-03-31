@@ -52,7 +52,7 @@ function getRedirectTarget() {
 async function redirectAfterLogin(loggedUser) {
   const redirectTo = getRedirectTarget()
 
-  if (!hasCompletedUserProfile(loggedUser)) {
+  if (!(await hasCompletedUserProfile(loggedUser))) {
     await router.replace({
       name: 'profile-setup',
       query: { redirect: String(redirectTo) },
