@@ -86,6 +86,7 @@ Observacoes sobre VITE_ALLOWED_LOGIN_DOMAIN:
 - Para mais de um dominio, separe por virgula, ponto e virgula ou espaco.
 - Exemplo: example.edu,students.example.edu
 - O app usa login com Google via popup e valida o dominio permitido apos autenticar.
+- Em producao (GitHub Pages), essa variavel precisa estar nos Secrets do workflow.
 
 ### Restricao de dominio no Firebase (recomendado)
 
@@ -137,7 +138,12 @@ No repositorio GitHub, configure os Secrets:
 - VITE_FIREBASE_STORAGE_BUCKET
 - VITE_FIREBASE_MESSAGING_SENDER_ID
 - VITE_FIREBASE_APP_ID
-- VITE_ALLOWED_LOGIN_DOMAIN (opcional; aceita lista separada por virgula)
+- VITE_ALLOWED_LOGIN_DOMAIN (obrigatorio para manter restricao de dominio no deploy)
+
+Importante:
+
+- O build do GitHub Pages usa os valores dos Secrets, nao o arquivo .env local.
+- Se VITE_ALLOWED_LOGIN_DOMAIN nao estiver nos Secrets, a restricao pode falhar em producao.
 
 Depois:
 

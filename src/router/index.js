@@ -12,6 +12,7 @@ import MyProductsView from '../views/MyProductsView.vue'
 import FavoritesView from '../views/FavoritesView.vue'
 import ChatView from '../views/ChatView.vue'
 import {
+  AUTH_ERROR_KIND_DOMAIN_RESTRICTED,
   getCurrentUser,
   getLoginDomainRestrictionMessage,
   initAuth,
@@ -93,7 +94,11 @@ router.beforeEach(async (to) => {
   const user = getCurrentUser()
 
   if (user && !isLoginEmailAllowed(user.email)) {
-    setAuthErrorMessage(getLoginDomainRestrictionMessage(user.email))
+    setAuthErrorMessage(
+      getLoginDomainRestrictionMessage(user.email),
+      AUTH_ERROR_KIND_DOMAIN_RESTRICTED,
+      user.email,
+    )
 
     try {
       await signOutUser()

@@ -1,10 +1,14 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import DomainRestrictionModal from '../components/DomainRestrictionModal.vue'
 import {
+  AUTH_ERROR_KIND_DOMAIN_RESTRICTED,
   allowedLoginDomainsText,
   authError,
+  authErrorKind,
   authState,
+  blockedLoginDomain,
   clearAuthError,
   isLoginDomainRestrictionEnabled,
   signInWithGoogle,
@@ -18,6 +22,22 @@ const router = useRouter()
 const user = computed(() => authState.value)
 const isSigningIn = ref(false)
 const loginError = computed(() => authError.value)
+const isDomainRestrictionError = computed(
+  () => authErrorKind.value === AUTH_ERROR_KIND_DOMAIN_RESTRICTED,
+)
+const showDomainRestrictionModal = computed(
+  () => Boolean(loginError.value) && isDomainRestrictionError.value,
+)
+
+function closeDomainRestrictionModal() {
+  clearAuthError()
+}
+
+function handleDomainRestrictionModalModelUpdate(nextValue) {
+  if (!nextValue) {
+    closeDomainRestrictionModal()
+  }
+}
 
 function getRedirectTarget() {
   const redirectTo = String(route.query.redirect || '/profile')
@@ -111,7 +131,15 @@ async function handleLogout() {
         </div>
       </div>
 
-      <p v-if="loginError" class="status-message error">{{ loginError }}</p>
+      <p v-if="loginError && !isDomainRestrictionError" class="status-message error">{{ loginError }}</p>
     </article>
+
+    <DomainRestrictionModal
+      :model-value="showDomainRestrictionModal"
+      :allowed-domains-text="allowedLoginDomainsText"
+      :blocked-domain="blockedLoginDomain"
+      @update:modelValue="handleDomainRestrictionModalModelUpdate"
+      @close="closeDomainRestrictionModal"
+    />
   </section>
 </template>

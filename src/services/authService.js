@@ -11,6 +11,8 @@ import { auth, isFirebaseConfigured } from '../firebase/config'
 
 const MOCK_USER_KEY = 'marketplace_mock_user'
 const DOMAIN_PLACEHOLDER = 'example.edu'
+export const AUTH_ERROR_KIND_DOMAIN_RESTRICTED = 'domain-restricted'
+export const AUTH_ERROR_KIND_GENERIC = 'generic'
 
 function parseAllowedLoginDomains(rawValue) {
   const normalized = String(rawValue || '').trim().toLowerCase()
@@ -34,6 +36,8 @@ const configuredLoginDomains = parseAllowedLoginDomains(import.meta.env.VITE_ALL
 export const authState = ref(null)
 export const authReady = ref(false)
 export const authError = ref('')
+export const authErrorKind = ref('')
+export const blockedLoginDomain = ref('')
 export const allowedLoginDomains = configuredLoginDomains.length
   ? configuredLoginDomains
   : [DOMAIN_PLACEHOLDER]
@@ -136,6 +140,13 @@ function getFriendlyAuthErrorMessage(error) {
     : 'Nao foi possivel concluir a autenticacao com Google.'
 }
 
+function setAuthError(kind, message, domain = '') {
+  authErrorKind.value = kind
+  authError.value = String(message || '').trim()
+  blockedLoginDomain.value =
+    kind === AUTH_ERROR_KIND_DOMAIN_RESTRICTED ? String(domain || '').trim().toLowerCase() : ''
+}
+
 function getEmailDomain(email) {
   const normalized = String(email || '').trim().toLowerCase()
   const atIndex = normalized.lastIndexOf('@')
@@ -183,8 +194,18 @@ export function getLoginDomainRestrictionMessage(email = '') {
   return getDomainRestrictionMessage(email)
 }
 
-export function setAuthErrorMessage(message) {
-  authError.value = String(message || '').trim()
+function setDomainRestrictionError(email = '') {
+  const attemptedDomain = getEmailDomain(email)
+  setAuthError(
+    AUTH_ERROR_KIND_DOMAIN_RESTRICTED,
+    getDomainRestrictionMessage(email),
+    attemptedDomain,
+  )
+}
+
+export function setAuthErrorMessage(message, kind = AUTH_ERROR_KIND_GENERIC, email = '') {
+  const attemptedDomain = kind === AUTH_ERROR_KIND_DOMAIN_RESTRICTED ? getEmailDomain(email) : ''
+  setAuthError(kind, message, attemptedDomain)
 }
 
 async function applyDomainRestrictionOrSignOut(user) {
@@ -194,7 +215,7 @@ async function applyDomainRestrictionOrSignOut(user) {
     return mapUser(user)
   }
 
-  authError.value = getDomainRestrictionMessage(resolvedEmail)
+  setDomainRestrictionError(resolvedEmail)
 
   try {
     await signOut(auth)
@@ -208,6 +229,8 @@ async function applyDomainRestrictionOrSignOut(user) {
 
 export function clearAuthError() {
   authError.value = ''
+  authErrorKind.value = ''
+  blockedLoginDomain.value = ''
 }
 
 export function initAuth() {
@@ -285,7 +308,7 @@ export async function signInWithGoogle() {
 
       return validatedUser
     } catch (err) {
-      authError.value = getFriendlyAuthErrorMessage(err)
+      setAuthError(AUTH_ERROR_KIND_GENERIC, getFriendlyAuthErrorMessage(err))
       return null
     }
   }
