@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { authState, deleteAuthenticatedUser, signOutUser } from '../services/authService'
+import { authState, deleteAuthenticatedUser, isAdminSession, signOutUser } from '../services/authService'
 import { deleteUserChatData } from '../services/chatService'
 import AppModal from '../components/AppModal.vue'
 import ProductCard from '../components/ProductCard.vue'
@@ -15,6 +15,7 @@ import {
 const router = useRouter()
 const route = useRoute()
 const user = computed(() => authState.value)
+const isAdmin = computed(() => Boolean(isAdminSession.value))
 const profile = ref(null)
 const myProducts = ref([])
 const isLoading = ref(false)
@@ -25,7 +26,7 @@ const hasConfiguredProfile = computed(() => (isLoading.value ? true : isUserProf
 const highlightedMyProducts = computed(() => myProducts.value.slice(0, 3))
 const accountDeletionEffects = [
   'seus dados de perfil',
-  'seus anuncios',
+  'seus anúncios',
   'suas conversas ativas',
 ]
 
@@ -33,7 +34,7 @@ function formatDate(value) {
   const parsed = new Date(value)
 
   if (Number.isNaN(parsed.getTime())) {
-    return value || 'Nao informado'
+    return value || 'Não informado'
   }
 
   return parsed.toLocaleDateString('pt-BR')
@@ -88,7 +89,7 @@ async function confirmDeleteAccount() {
       message.includes('Missing or insufficient permissions')
 
     accountActionError.value = isPermissionDenied
-      ? 'Permissao insuficiente no Firebase para remover todos os dados da conta. Revise as regras do Firestore/Storage para permitir exclusao dos dados do proprio usuario.'
+      ? 'Permissão insuficiente no Firebase para remover todos os dados da conta. Revise as regras do Firestore/Storage para permitir exclusão dos dados do próprio usuário.'
       : message
   } finally {
     isDeletingAccount.value = false
@@ -139,16 +140,16 @@ watch(
 
         <div class="my-info">
           <h1>{{ profile?.fullName || user.displayName || 'Meu perfil' }}</h1>
-          <p><strong>Cidade natal:</strong> {{ profile?.city || 'Nao informado' }}</p>
-          <p><strong>Curso/Ocupacao:</strong> {{ profile?.universityRole || 'Nao informado' }}</p>
+          <p><strong>Cidade natal:</strong> {{ profile?.city || 'Não informado' }}</p>
+          <p><strong>Curso/Ocupação:</strong> {{ profile?.universityRole || 'Não informado' }}</p>
           <p><strong>Desde:</strong> {{ formatDate(profile?.joinedAt) }}</p>
           <p class="my-about-row">
             <strong>Sobre mim:</strong>
-            <span class="about-text">{{ profile?.about || 'Nao Disponivel' }}</span>
+            <span class="about-text">{{ profile?.about || 'Não Disponível' }}</span>
           </p>
 
           <p v-if="!hasConfiguredProfile" class="muted" style="margin-top: 6px">
-            Complete seu cadastro para liberar edicao de perfil e uso completo da conta.
+            Complete seu cadastro para liberar edição de perfil e uso completo da conta.
           </p>
 
           <div class="my-profile-actions">
@@ -157,6 +158,7 @@ watch(
             </RouterLink>
             <RouterLink v-else to="/profile/setup" class="btn secondary">Completar cadastro</RouterLink>
             <button
+              v-if="!isAdmin"
               class="btn danger"
               type="button"
               @click="handleDeleteAccount"
@@ -176,15 +178,15 @@ watch(
 
     <article class="card">
       <div class="my-products-head">
-        <h2>Meus anuncios</h2>
+        <h2>Meus anúncios</h2>
         <RouterLink to="/my/products" class="btn secondary">Mais Detalhes</RouterLink>
       </div>
 
       <p v-if="!myProducts.length" class="muted" style="margin: 10px 18px">
-        Voce ainda nao publicou anuncios.
+        Você ainda não publicou anúncios.
       </p>
 
-      <section v-else class="grid products  " aria-label="Previa dos meus anuncios">
+      <section v-else class="grid products  " aria-label="Previa dos meus anúncios">
         <ProductCard
           v-for="product in highlightedMyProducts"
           :key="product.id"
@@ -207,7 +209,7 @@ watch(
     v-model="showDeleteAccountModal"
     variant="danger"
     title="Excluir conta"
-    message="Ao apagar sua conta voce perdera o acesso permanentemente e os itens abaixo serao excluidos:"
+    message="Ao apagar sua conta você perderá o acesso permanentemente e os itens abaixo serão excluídos:"
     :details="accountDeletionEffects"
     confirm-text="Excluir conta"
     confirm-text-busy="Excluindo conta..."

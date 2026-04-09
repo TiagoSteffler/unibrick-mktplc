@@ -86,11 +86,11 @@ function isOwnMessage(message) {
 
 function getTopicIntroText(message) {
   const title = String(message.topicProductTitle || activeTopicProduct.value?.title || '').trim()
-  const safeTitle = title || 'anuncio sem titulo'
+  const safeTitle = title || 'anúncio sem título'
   const isBuyer = message.topicBuyerId === user.value?.uid
 
   return isBuyer
-    ? `Voce perguntou sobre: ${safeTitle}`
+    ? `Você perguntou sobre: ${safeTitle}`
     : `O comprador perguntou sobre: ${safeTitle}`
 }
 
@@ -191,7 +191,7 @@ async function ensureSystemConversationIfVendor() {
   try {
     await ensureUniBrikConversation(user.value)
   } catch {
-    // Falha no sistema de avisos nao pode bloquear a abertura das conversas diretas.
+    // Falha no sistema de avisos não pode bloquear a abertura das conversas diretas.
   }
 }
 
@@ -202,7 +202,7 @@ function buildTopicProduct(product) {
 
   return {
     productId: product.id,
-    title: String(product.title || '').trim() || 'Anuncio',
+    title: String(product.title || '').trim() || 'Anúncio',
     buyerId: user.value.uid,
   }
 }
@@ -390,7 +390,7 @@ watch(
       <p v-if="chatError" class="chat-error">{{ chatError }}</p>
 
       <p v-if="!hasConversations" class="muted" style="margin-top: 10px">
-        Voce nao tem nenhuma conversa ativa.
+        Você não tem nenhuma conversa ativa.
       </p>
 
       <ul v-else class="chat-conversation-list">
@@ -420,7 +420,7 @@ watch(
       </header>
 
       <div v-if="showTopicPreviewBanner" class="chat-topic-banner">
-        <strong>Voce esta pedindo sobre:</strong>
+        <strong>Você está pedindo sobre:</strong>
         <span>{{ activeTopicProduct?.title }}</span>
       </div>
 
@@ -473,7 +473,7 @@ watch(
 
       <footer class="chat-composer">
         <div v-if="pendingAttachment" class="chat-pending-attachment">
-          <small class="muted">Anexo sera enviado na proxima mensagem:</small>
+          <small class="muted">Anexo será enviado na próxima mensagem:</small>
           <strong>{{ pendingAttachment.title }}</strong>
         </div>
 
@@ -492,7 +492,7 @@ watch(
     </section>
 
     <section v-else class="card chat-empty-state">
-      <p class="muted">Voce nao tem nenhuma conversa ativa.</p>
+      <p class="muted">Você não tem nenhuma conversa ativa.</p>
     </section>
   </section>
 </template>

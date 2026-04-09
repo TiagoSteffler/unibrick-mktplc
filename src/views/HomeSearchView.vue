@@ -1,13 +1,15 @@
 <script setup>
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import ProductCard from '../components/ProductCard.vue'
+import { authState } from '../services/authService'
 import {
   getAvailableCategories,
   searchProducts,
 } from '../services/marketplaceService'
 
 const route = useRoute()
+const currentUser = computed(() => authState.value)
 
 const filters = reactive({
   category: '',
@@ -17,10 +19,77 @@ const filters = reactive({
   sortBy: 'recent',
 })
 
+const priceDisplay = reactive({
+  minPrice: '',
+  maxPrice: '',
+})
+
+const MAX_PRICE_CENTS = 999999
+
 const products = ref([])
 const categories = ref([])
 const isLoading = ref(false)
 const areFiltersOpen = ref(false)
+
+function formatCurrencyValue(value) {
+  return value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function clampPriceFromInput(rawValue, fieldName) {
+  const onlyDigits = String(rawValue || '').replace(/\D/g, '').slice(0, 6)
+
+  if (!onlyDigits) {
+    priceDisplay[fieldName] = ''
+    filters[fieldName] = ''
+    return
+  }
+
+  const cents = Math.min(Number.parseInt(onlyDigits, 10) || 0, MAX_PRICE_CENTS)
+  priceDisplay[fieldName] = formatCurrencyValue(cents / 100)
+  filters[fieldName] = (cents / 100).toFixed(2)
+}
+
+function formatPriceInput(event, fieldName) {
+  clampPriceFromInput(event.target.value, fieldName)
+  event.target.value = priceDisplay[fieldName]
+}
+
+function handlePriceKeydown(event, fieldName) {
+  if (event.key !== 'Backspace' && event.key !== 'Delete') {
+    return
+  }
+
+  const digits = String(priceDisplay[fieldName] || '').replace(/\D/g, '')
+
+  if (!digits) {
+    return
+  }
+
+  const nextDigits = digits.slice(0, -1)
+
+  if (!nextDigits) {
+    priceDisplay[fieldName] = ''
+    filters[fieldName] = ''
+    event.preventDefault()
+    return
+  }
+
+  clampPriceFromInput(nextDigits, fieldName)
+  event.preventDefault()
+}
+
+function handlePriceFocus(event) {
+  const target = event.target
+
+  setTimeout(() => {
+    target.selectionStart = target.selectionEnd = target.value.length
+  }, 0)
+}
 
 async function loadProducts() {
   isLoading.value = true
@@ -30,6 +99,8 @@ async function loadProducts() {
     products.value = await searchProducts({
       ...filters,
       query: queryTerm,
+    }, {
+      viewer: currentUser.value,
     })
   } finally {
     isLoading.value = false
@@ -40,7 +111,7 @@ async function initialize() {
   isLoading.value = true
 
   try {
-    categories.value = await getAvailableCategories()
+    categories.value = await getAvailableCategories({ viewer: currentUser.value })
     await loadProducts()
   } finally {
     isLoading.value = false
@@ -51,6 +122,8 @@ function resetFilters() {
   filters.category = ''
   filters.minPrice = ''
   filters.maxPrice = ''
+  priceDisplay.minPrice = ''
+  priceDisplay.maxPrice = ''
   filters.condition = ''
   filters.sortBy = 'recent'
   loadProducts()
@@ -70,13 +143,17 @@ watch(
     loadProducts()
   },
 )
+
+watch(currentUser, () => {
+  initialize()
+})
 </script>
 
 <template>
   <section class="search-layout">
     <aside class="card filters-panel">
       <h1>Pesquisa</h1>
-      <p class="muted">Filtre por preco, categoria e outros criterios.</p>
+      <p class="muted">Filtre por preço, categoria e outros critérios.</p>
 
       <button
         type="button"
@@ -106,11 +183,33 @@ watch(
       <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 8px">
         <div>
         <label class="filter-label">Preço mín.</label>
-        <input v-model="filters.minPrice" type="number" min="0" step="0.01" placeholder="Preço min" class="valueinput" />
+        <input
+          v-model="priceDisplay.minPrice"
+          type="text"
+          inputmode="numeric"
+          autocomplete="off"
+          placeholder="R$ 0,00"
+          class="valueinput"
+          @input="formatPriceInput($event, 'minPrice')"
+          @keydown="handlePriceKeydown($event, 'minPrice')"
+          @focus="handlePriceFocus"
+          @click="handlePriceFocus"
+        />
         </div>
         <div>
         <label class="filter-label">Preço máx.</label>
-        <input v-model="filters.maxPrice" type="number" min="0" step="0.01" placeholder="Preço max" class="valueinput" />
+        <input
+          v-model="priceDisplay.maxPrice"
+          type="text"
+          inputmode="numeric"
+          autocomplete="off"
+          placeholder="R$ 0,00"
+          class="valueinput"
+          @input="formatPriceInput($event, 'maxPrice')"
+          @keydown="handlePriceKeydown($event, 'maxPrice')"
+          @focus="handlePriceFocus"
+          @click="handlePriceFocus"
+        />
         </div>
       </div>
 

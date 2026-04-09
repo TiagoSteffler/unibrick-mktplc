@@ -1,8 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { authState } from '../services/authService'
-import { getProductById, isFavorite, toggleFavorite } from '../services/marketplaceService'
+import { authState, isAdminSession } from '../services/authService'
+import { getProductById, isFavorite, reportProduct, toggleFavorite } from '../services/marketplaceService'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,6 +17,19 @@ const zoomLevel = ref(1)
 const zoomOrigin = ref('50% 50%')
 const isModalOpen = ref(false)
 const thumbsLoaded = ref({})
+const isReporting = ref(false)
+const showReportModal = ref(false)
+const selectedReportReason = ref('')
+const reportStatusMessage = ref('')
+const reportStatusIsError = ref(false)
+
+const reportOptions = [
+  'Golpe',
+  'Venda de itens ilícitos',
+  'Violência, ódio, exploração',
+  'Bullying ou assédio',
+  'Nudez ou atividade sexual',
+]
 
 const mainPhotoStyle = computed(() => ({
   transform: `scale(${zoomLevel.value})`,
@@ -56,7 +69,7 @@ const deliveryMethods = computed(() => {
 
 const productLocation = computed(() => {
   if (!product.value) {
-    return 'Nao informado'
+    return 'Não informado'
   }
 
   const location = String(product.value.retrievalLocation || '').trim()
@@ -71,19 +84,71 @@ const isOwnProduct = computed(() => {
   return user.value.uid === product.value.sellerId
 })
 
+const canReportProduct = computed(() => {
+  if (!user.value || !product.value || isOwnProduct.value) {
+    return false
+  }
+
+  return true
+})
+
+const moderationStatusLabel = computed(() => {
+  if (!product.value) {
+    return ''
+  }
+
+  if (product.value.moderationStatus === 'pending') {
+    return 'Anúncio aguardando aprovação'
+  }
+
+  if (product.value.moderationStatus === 'reported') {
+    return 'Anúncio reportado para revisão'
+  }
+
+  if (product.value.moderationStatus === 'rejected') {
+    return 'Anúncio rejeitado pela administração'
+  }
+
+  return ''
+})
+
+const showModerationStatus = computed(() => {
+  if (!product.value || !moderationStatusLabel.value) {
+    return false
+  }
+
+  return isOwnProduct.value || isAdminSession.value
+})
+
+const invalidProductPolicyMessage = computed(() => {
+  if (!product.value || product.value.moderationStatus !== 'rejected') {
+    return ''
+  }
+
+  const reason = String(product.value.moderationReason || '').trim() || 'Não informado'
+  return `Anúncio denunciado por: ${reason}. Altere o anúncio para que possa ser avaliado novamente e publicado se estiver de acordo com as políticas da plataforma.`
+})
+
+const showInvalidProductPolicyMessage = computed(() =>
+  Boolean(invalidProductPolicyMessage.value) && (isOwnProduct.value || isAdminSession.value),
+)
+
 async function loadProduct() {
   isLoading.value = true
 
   try {
-    product.value = await getProductById(route.params.id)
+    product.value = await getProductById(route.params.id, { viewer: user.value })
 
-    if (product.value) {
-      selectedPhoto.value = product.value.photos[0] || ''
-      thumbsLoaded.value = Object.fromEntries(
-        product.value.photos.map((photo, index) => [buildThumbKey(photo, index), false]),
-      )
-      resetPhotoZoom()
+    if (!product.value) {
+      await router.replace({ name: 'not-found' })
+      return
     }
+
+    selectedPhoto.value = product.value.photos[0] || ''
+    thumbsLoaded.value = Object.fromEntries(
+      product.value.photos.map((photo, index) => [buildThumbKey(photo, index), false]),
+    )
+    resetPhotoZoom()
 
     if (product.value && user.value) {
       favorite.value = await isFavorite(user.value, product.value.id)
@@ -194,6 +259,47 @@ async function handleFavorite() {
   favorite.value = await toggleFavorite(user.value, product.value.id)
 }
 
+function openReportModal() {
+  if (!canReportProduct.value || isReporting.value) {
+    return
+  }
+
+  selectedReportReason.value = ''
+  showReportModal.value = true
+}
+
+function closeReportModal() {
+  if (isReporting.value) {
+    return
+  }
+
+  showReportModal.value = false
+  selectedReportReason.value = ''
+}
+
+async function submitReport() {
+  if (!product.value || !user.value || isReporting.value || !selectedReportReason.value) {
+    return
+  }
+
+  isReporting.value = true
+  reportStatusMessage.value = ''
+  reportStatusIsError.value = false
+
+  try {
+    await reportProduct(product.value.id, user.value, selectedReportReason.value)
+    closeReportModal()
+    reportStatusMessage.value =
+      'Obrigado pela denúncia. Ela será repassada a administração para devidas providências, se aplicável.'
+    await loadProduct()
+  } catch (err) {
+    reportStatusMessage.value = err instanceof Error ? err.message : 'Falha ao reportar anúncio.'
+    reportStatusIsError.value = true
+  } finally {
+    isReporting.value = false
+  }
+}
+
 function openSellerChat() {
   if (!product.value) {
     return
@@ -232,7 +338,7 @@ onMounted(() => {
   <section v-if="product" class="product-page-layout loading-section">
     <div v-if="isLoading" class="section-loading-overlay" aria-live="polite">
       <span class="spinner" aria-hidden="true"></span>
-      <p>Carregando anuncio...</p>
+      <p>Carregando anúncio...</p>
     </div>
 
     <article class="card product-gallery-card">
@@ -264,7 +370,7 @@ onMounted(() => {
           v-if="product.photos.length > 1"
           type="button"
           class="gallery-nav next"
-          aria-label="Proxima foto"
+          aria-label="Próxima foto"
           @click.stop="showNextPhoto"
         >
           ›
@@ -295,26 +401,53 @@ onMounted(() => {
     <article class="card product-info-card">
       <div class="product-title-row">
         <h1>{{ product.title }}</h1>
-        <button
-          class="favorite-star-btn"
-          type="button"
-          :aria-label="favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'"
-          @click="handleFavorite"
-        >
-          <span :class="['favorite-star-icon', { active: favorite }]">{{ favorite ? '★' : '☆' }}</span>
-        </button>
+        <div class="product-title-actions">
+          <button
+            v-if="canReportProduct"
+            class="report-flag-btn"
+            type="button"
+            aria-label="Reportar anúncio"
+            @click="openReportModal"
+          >
+            ⚑
+          </button>
+
+          <button
+            class="favorite-star-btn"
+            type="button"
+            :aria-label="favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'"
+            @click="handleFavorite"
+          >
+            <span :class="['favorite-star-icon', { active: favorite }]">{{ favorite ? '★' : '☆' }}</span>
+          </button>
+        </div>
       </div>
 
       <p class="product-price">{{ formattedPrice }}</p>
+      <p v-if="showModerationStatus" class="muted" style="margin: 0 0 10px; color: #b45309">
+        {{ moderationStatusLabel }}
+      </p>
 
       <div class="product-details-list">
         <p><strong>Estado:</strong> {{ product.condition === 'novo' ? 'Novo' : 'Usado' }}</p>
         <p><strong>Categoria:</strong> {{ product.category }}</p>
-        <p><strong>Descricao:</strong> </p>
+        <p><strong>Descrição:</strong> </p>
         <p>{{ product.description }}</p>
         <p><strong>Localizacao:</strong> {{ productLocation }}</p>
         <p v-if="deliveryMethods.length"><strong>{{ deliveryMethods.join(' | ') }}</strong> </p>
       </div>
+
+      <p v-if="showInvalidProductPolicyMessage" class="muted" style="color: #b45309; line-height: 1.5">
+        {{ invalidProductPolicyMessage }}
+      </p>
+
+      <p
+        v-if="reportStatusMessage"
+        class="muted"
+        :style="reportStatusIsError ? 'color: #b91c1c' : 'color: #166534'"
+      >
+        {{ reportStatusMessage }}
+      </p>
 
       <div class="product-bottom-actions">
         <button class="btn secondary" type="button" @click="openSellerChat">
@@ -322,6 +455,7 @@ onMounted(() => {
         </button>
         <RouterLink class="btn" :to="`/seller/${product.sellerId}`">Ver vendedor</RouterLink>
       </div>
+
     </article>
   </section>
 
@@ -362,7 +496,7 @@ onMounted(() => {
           v-if="product.photos.length > 1"
           type="button"
           class="gallery-nav next"
-          aria-label="Proxima foto"
+          aria-label="Próxima foto"
           @click.stop="showNextPhoto"
         >
           ›
@@ -384,4 +518,149 @@ onMounted(() => {
     </div>
   </div>
 
+  <Teleport to="body">
+    <div v-if="showReportModal" class="report-modal-overlay" role="presentation" @click="closeReportModal">
+      <article class="report-modal-card" role="dialog" aria-modal="true" @click.stop>
+        <header class="report-modal-header">
+          <h2>Reportar anúncio</h2>
+          <button
+            type="button"
+            class="report-modal-close"
+            :disabled="isReporting"
+            aria-label="Fechar"
+            @click="closeReportModal"
+          >
+            x
+          </button>
+        </header>
+
+        <div class="report-modal-content">
+          <p class="report-modal-message">Selecione um motivo para a denúncia:</p>
+
+          <label v-for="option in reportOptions" :key="option" class="report-option-row">
+            <input v-model="selectedReportReason" type="radio" :value="option" :disabled="isReporting" />
+            <span>{{ option }}</span>
+          </label>
+        </div>
+
+        <footer class="report-modal-actions">
+          <button class="btn secondary" type="button" :disabled="isReporting" @click="closeReportModal">
+            Cancelar
+          </button>
+          <button
+            class="btn danger"
+            type="button"
+            :disabled="isReporting || !selectedReportReason"
+            @click="submitReport"
+          >
+            {{ isReporting ? 'Submetendo...' : 'Submeter' }}
+          </button>
+        </footer>
+      </article>
+    </div>
+  </Teleport>
+
+  <section v-if="isLoading" class="card">
+    <p class="muted">Carregando anúncio...</p>
+  </section>
+
 </template>
+
+<style scoped>
+.product-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-flag-btn {
+  border: 1px solid #d1dce8;
+  background: #fff;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 20px;
+  color: #475569;
+}
+
+.report-flag-btn:hover {
+  background: #f8fafc;
+}
+
+.report-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(3px);
+  display: grid;
+  place-items: center;
+  z-index: 60;
+  padding: 20px;
+}
+
+.report-modal-card {
+  width: min(560px, 100%);
+  background: #fff;
+  border: 1px solid #dbe4ee;
+  border-top: 5px solid #dc2626;
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+  overflow: hidden;
+}
+
+.report-modal-header {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.report-modal-header h2 {
+  margin: 0;
+  font-size: 20px;
+  color: #0f172a;
+}
+
+.report-modal-close {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #334155;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+}
+
+.report-modal-content {
+  padding: 2px 16px 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.report-modal-message {
+  margin: 0;
+  color: #1e293b;
+  line-height: 1.5;
+}
+
+.report-option-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #0f172a;
+}
+
+.report-modal-actions {
+  border-top: 1px solid #e2e8f0;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+</style>

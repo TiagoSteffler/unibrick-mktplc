@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { authState } from '../services/authService'
+import { authState, isAdminSession } from '../services/authService'
 import AppModal from '../components/AppModal.vue'
 import { deleteProduct, getProductById, getUserProfile, updateProduct } from '../services/marketplaceService'
 import { PRODUCT_CATEGORIES, RETRIEVAL_LOCATIONS } from '../constants/productOptions'
@@ -19,6 +19,7 @@ const isDeleting = ref(false)
 const showSuccessModal = ref(false)
 const showDeleteConfirmModal = ref(false)
 const redirectAfterSave = ref('')
+const savedModerationStatus = ref('approved')
 
 const photos = ref([])
 const previewPhotos = ref([])
@@ -98,16 +99,16 @@ async function loadProduct() {
   error.value = ''
 
   try {
-    const product = await getProductById(route.params.id)
+    const product = await getProductById(route.params.id, { viewer: user.value })
 
     if (!product) {
-      error.value = 'Anuncio nao encontrado.'
+      error.value = 'Anúncio não encontrado.'
       loading.value = false
       return
     }
 
-    if (!user.value || product.sellerId !== user.value.uid) {
-      error.value = 'Voce nao pode editar este anuncio.'
+    if (!user.value || (product.sellerId !== user.value.uid && !isAdminSession.value)) {
+      error.value = 'Você não pode editar este anúncio.'
       loading.value = false
       return
     }
@@ -178,7 +179,7 @@ async function processSelectedPhotos(selected) {
   const availableSlots = MAX_PHOTOS - previewPhotos.value.length
 
   if (availableSlots <= 0) {
-    error.value = `Voce pode enviar no maximo ${MAX_PHOTOS} fotos.`
+    error.value = `Você pode enviar no máximo ${MAX_PHOTOS} fotos.`
     return
   }
 
@@ -219,14 +220,14 @@ async function submitEdit() {
   error.value = ''
 
   if (previewPhotos.value.length < 1) {
-    error.value = 'Inclua pelo menos uma foto para manter o anuncio ativo.'
+    error.value = 'Inclua pelo menos uma foto para manter o anúncio ativo.'
     return
   }
 
   const numericPrice = Number(form.price)
 
   if (!Number.isFinite(numericPrice) || numericPrice < 0 || numericPrice > 9999.99) {
-    error.value = 'O preco deve estar entre R$ 0,00 e R$ 9.999,99.'
+    error.value = 'O preço deve estar entre R$ 0,00 e R$ 9.999,99.'
     return
   }
 
@@ -249,10 +250,11 @@ async function submitEdit() {
       user.value,
     )
 
+    savedModerationStatus.value = String(updated?.moderationStatus || 'approved')
     redirectAfterSave.value = `/product/${updated.id}`
     showSuccessModal.value = true
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Falha ao editar anuncio.'
+    error.value = err instanceof Error ? err.message : 'Falha ao editar anúncio.'
   } finally {
     isSubmitting.value = false
   }
@@ -276,7 +278,7 @@ async function confirmDelete() {
     await deleteProduct(route.params.id, user.value)
     router.push('/my/products')
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Falha ao excluir anuncio.'
+    error.value = err instanceof Error ? err.message : 'Falha ao excluir anúncio.'
     isDeleting.value = false
   }
 }
@@ -296,11 +298,11 @@ onMounted(() => {
   </section>
   
   <section v-else class="card product-create-card loading-section" :class="{ busy: isBusy }">
-    <div v-if="loading || isSubmitting || isDeleting || isRedirecting" class="section-loading-overlay" aria-live="polite">
+    <div v-if="loading || isSubmitting || isDeleting" class="section-loading-overlay" aria-live="polite">
       <span class="spinner" aria-hidden="true"></span>
-      <p v-if="loading">Carregando anuncio...</p>
-      <p v-else-if="isDeleting">Excluindo anuncio...</p>
-      <p v-else>Salvando alteracoes e enviando imagens...</p>
+      <p v-if="loading">Carregando anúncio...</p>
+      <p v-else-if="isDeleting">Excluindo anúncio...</p>
+      <p v-else>Salvando alterações e enviando imagens...</p>
     </div>
 
     <h1>Editar Produto</h1>
@@ -309,12 +311,12 @@ onMounted(() => {
       <fieldset class="product-fieldset" :disabled="isBusy">
         <div class="stack-md">
         <label class="field">
-          <span>Titulo do anuncio</span>
+          <span>Título do anúncio</span>
           <input v-model="form.title" type="text" required placeholder="Ex.: Notebook Acer" />
         </label>
 
         <label class="field">
-          <span>Descricao</span>
+          <span>Descrição</span>
           <textarea
             v-model="form.description"
             rows="6"
@@ -324,7 +326,7 @@ onMounted(() => {
         </label>
 
         <label class="field">
-          <span>Preco</span>
+          <span>Preço</span>
           <input 
             v-model="form.priceDisplay" 
             type="text" 
@@ -345,7 +347,7 @@ onMounted(() => {
         </label>
 
         <label class="field">
-          <span>Estado de conservacao</span>
+          <span>Estado de conservação</span>
           <select v-model="form.condition" required>
             <option value="usado">Usado</option>
             <option value="novo">Novo</option>
@@ -353,7 +355,7 @@ onMounted(() => {
         </label>
         
         <fieldset class="field" style="border: none; padding: 0; margin-top: 8px;">
-          <legend style="margin-bottom: 8px;">Metodos de entrega</legend>
+          <legend style="margin-bottom: 8px;">Métodos de entrega</legend>
           <div style="display: flex; gap: 16px;">
             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
               <input type="checkbox" v-model="form.deliveryOptions.delivery" />
@@ -394,7 +396,7 @@ onMounted(() => {
                 @drop.prevent="handlePhotoDrop"
               ></span>
               <strong>Arraste ou clique para adicionar mais</strong>
-              <small class="muted">Maximo {{ MAX_PHOTOS }} arquivos no total.</small>
+              <small class="muted">Máximo {{ MAX_PHOTOS }} arquivos no total.</small>
             </label>
           </div>
 
@@ -411,10 +413,10 @@ onMounted(() => {
             Cancelar
           </RouterLink>
           <button type="button" class="btn danger" @click="handleDelete" :disabled="isBusy">
-            {{ isDeleting ? 'Excluindo...' : 'Excluir anuncio' }}
+            {{ isDeleting ? 'Excluindo...' : 'Excluir anúncio' }}
           </button>
           <button class="btn" type="submit" :disabled="isBusy">
-            {{ isSubmitting ? 'Salvando...' : 'Salvar alteracoes' }}
+            {{ isSubmitting ? 'Salvando...' : 'Salvar alterações' }}
           </button>
         </div>
       </fieldset>
@@ -425,9 +427,9 @@ onMounted(() => {
     <AppModal
       v-model="showDeleteConfirmModal"
       variant="danger"
-      title="Excluir anuncio"
-      message="Tem certeza que deseja excluir este anuncio? Esta acao nao pode ser desfeita."
-      confirm-text="Excluir anuncio"
+      title="Excluir anúncio"
+      message="Tem certeza que deseja excluir este anúncio? Esta ação não pode ser desfeita."
+      confirm-text="Excluir anúncio"
       cancel-text="Cancelar"
       @confirm="confirmDelete"
     />
@@ -435,11 +437,22 @@ onMounted(() => {
     <AppModal
       v-model="showSuccessModal"
       variant="info"
-      title="Edicao concluida"
-      message="Seu anuncio foi atualizado com sucesso."
-      :details="['As alteracoes ja estao disponiveis na pagina do produto.']"
-      confirm-text="Ir para o anuncio"
-      cancel-text="Ficar na edicao"
+      title="Edição concluída"
+      :message="
+        savedModerationStatus === 'pending'
+          ? 'Edição enviada. O anúncio agora aguarda nova aprovação da administração.'
+          : 'Seu anúncio foi atualizado com sucesso.'
+      "
+      :details="
+        savedModerationStatus === 'pending'
+          ? [
+              'Enquanto estiver pendente, somente você e administradores conseguem visualizar o anúncio.',
+              'Assim que aprovado, o anúncio volta a aparecer para todos.',
+            ]
+          : ['As alterações já estão disponíveis na página do produto.']
+      "
+      confirm-text="Ir para o anúncio"
+      cancel-text="Ficar na edição"
       @confirm="handleSuccessConfirm"
     />
   </section>

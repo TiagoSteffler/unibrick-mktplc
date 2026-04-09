@@ -25,7 +25,7 @@ function closeModal() {
 <template>
   <Teleport to="body">
     <div v-if="props.modelValue" class="domain-modal-overlay" role="presentation" @click="closeModal">
-      <article class="domain-modal-card" role="dialog" aria-modal="true" aria-label="Dominio de email nao permitido" @click.stop>
+      <article class="domain-modal-card" role="dialog" aria-modal="true" aria-label="Domínio de email não permitido" @click.stop>
         <header class="domain-modal-header">
           <span class="domain-modal-chip">Acesso restrito</span>
           <h2>Que pena!</h2>
@@ -33,28 +33,28 @@ function closeModal() {
 
         <div class="domain-modal-content">
           <p>
-            O email identificado nao faz parte dos dominios institucionais habilitados para esta plataforma.
+            O email identificado não faz parte dos domínios institucionais habilitados para esta plataforma.
           </p>
           <p>
             Esta ferramenta foi criada para apoiar estudantes e servidores da UFSM, por isso o cadastro fica
-            disponivel apenas para contas com dominio valido da instituicao.
+            disponível apenas para contas com domínio válido da instituição.
           </p>
           <p>
-            Confira se voce entrou com o email correto e tente novamente.
+            Confira se você entrou com o email correto e tente novamente.
           </p>
 
           <div class="domain-modal-domain-box">
             <p v-if="blockedDomain" class="domain-modal-domain-row">
-              Dominio identificado: <strong>@{{ blockedDomain }}</strong>
+              Domínio identificado: <strong>@{{ blockedDomain }}</strong>
             </p>
             <p class="domain-modal-domain-row">
-              Dominios permitidos: <strong>{{ allowedDomainsText }}</strong>
+              Domínios permitidos: <strong>{{ allowedDomainsText }}</strong>
             </p>
           </div>
         </div>
 
         <footer class="domain-modal-actions">
-          <button type="button" class="btn" @click="closeModal">Voltar a pagina de Login</button>
+          <button type="button" class="btn" @click="closeModal">Voltar a página de Login</button>
         </footer>
       </article>
     </div>

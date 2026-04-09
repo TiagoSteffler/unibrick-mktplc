@@ -111,7 +111,7 @@ function createDirectConversationBase(currentUser, otherUser, createdAt = nowIso
     participants: [currentUser.uid, otherUser.id],
     participantProfiles: {
       [currentUser.uid]: {
-        name: currentUser.displayName || 'Usuario',
+        name: currentUser.displayName || 'Usuário',
         photoURL: '',
       },
       [otherUser.id]: {
@@ -257,7 +257,7 @@ export async function getConversationMessages(conversationId) {
 
 export async function ensureDirectConversation(currentUser, otherUser, options = {}) {
   if (!currentUser || !otherUser?.id) {
-    throw new Error('Dados de conversa invalidos.')
+    throw new Error('Dados de conversa inválidos.')
   }
 
   const topicProduct = normalizeTopicProduct(options.topicProduct)
@@ -315,7 +315,7 @@ export async function ensureDirectConversation(currentUser, otherUser, options =
 
 export function buildDirectConversationDraft(currentUser, otherUser) {
   if (!currentUser || !otherUser?.id) {
-    throw new Error('Dados de conversa invalidos.')
+    throw new Error('Dados de conversa inválidos.')
   }
 
   return createDirectConversationBase(currentUser, otherUser)
@@ -366,7 +366,7 @@ export async function ensureUniBrikConversation(user) {
   }
 
   const conversationId = getSystemConversationId(user.uid)
-  const messageText = 'UniBrik: Suas atualizacoes de anuncios aparecerao por aqui.'
+  const messageText = 'UniBrik: Suas atualizações de anúncios aparecerão por aqui.'
 
   const baseConversation = normalizeConversation({
     id: conversationId,
@@ -439,15 +439,15 @@ export async function ensureUniBrikConversation(user) {
 
 export async function sendChatMessage(user, conversation, payload) {
   if (!user) {
-    throw new Error('Usuario nao autenticado.')
+    throw new Error('Usuário não autenticado.')
   }
 
   if (!conversation?.id) {
-    throw new Error('Conversa invalida.')
+    throw new Error('Conversa inválida.')
   }
 
   if (conversation.readOnly) {
-    throw new Error('Esta conversa e somente leitura.')
+    throw new Error('Esta conversa é somente leitura.')
   }
 
   const text = String(payload?.text || '').trim()
@@ -470,7 +470,7 @@ export async function sendChatMessage(user, conversation, payload) {
         kind: 'topic-intro',
         conversationId: conversation.id,
         senderId: topicIntro.buyerId,
-        senderName: user.displayName || 'Usuario',
+        senderName: user.displayName || 'Usuário',
         text: '',
         attachment: null,
         createdAt: topicCreatedAt,
@@ -484,13 +484,13 @@ export async function sendChatMessage(user, conversation, payload) {
     id: `msg-${Date.now()}`,
     conversationId: conversation.id,
     senderId: user.uid,
-    senderName: user.displayName || 'Usuario',
+    senderName: user.displayName || 'Usuário',
     text,
     attachment,
     createdAt,
   })
 
-  const preview = text || (attachment ? `Anuncio anexado: ${attachment.title}` : 'Nova mensagem')
+  const preview = text || (attachment ? `Anúncio anexado: ${attachment.title}` : 'Nova mensagem')
 
   const updatedConversation = normalizeConversation({
     ...conversation,
@@ -586,7 +586,7 @@ export function getConversationPeer(conversation, currentUserId) {
 
   return {
     id: otherId,
-    name: profile.name || 'Usuario',
+    name: profile.name || 'Usuário',
     photoURL: profile.photoURL || '',
   }
 }

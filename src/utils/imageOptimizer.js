@@ -154,7 +154,7 @@ async function compressCanvas(canvas) {
 
 export async function optimizeMarketplaceImage(file) {
   if (!(file instanceof File) || !String(file.type || '').startsWith('image/')) {
-    throw new Error('Arquivo invalido. Selecione apenas imagens.')
+    throw new Error('Arquivo inválido. Selecione apenas imagens.')
   }
 
   const image = await readImageFromFile(file)

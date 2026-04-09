@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { authState } from './services/authService'
+import { authState, isAdminSession } from './services/authService'
 import { getUserProfile } from './services/marketplaceService'
 import appLogo from './assets/blue-logo-1-CDTEx3Yb.png'
 
@@ -9,6 +9,7 @@ const router = useRouter()
 const route = useRoute()
 const headerSearch = ref('')
 const isAuthenticated = computed(() => Boolean(authState.value))
+const isAdmin = computed(() => Boolean(isAuthenticated.value && isAdminSession.value))
 const profilePhoto = computed(() => {
   // Reavalia em mudancas de rota para refletir perfil sincronizado em background.
   void route.fullPath
@@ -93,15 +94,22 @@ function goToProtected(path) {
           href="/my/products"
           class="menu-item"
           @click.prevent="goToProtected('/my/products')"
-          aria-label="Meus anuncios"
+          aria-label="Meus anúncios"
         >
           <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M3 7h18"></path>
             <path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"></path>
             <path d="M5 7l1 13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-13"></path>
           </svg>
-          <span class="menu-label">Meus Anuncios</span>
+          <span class="menu-label">Meus Anúncios</span>
         </a>
+
+        <RouterLink v-if="isAdmin" to="/admin" class="menu-item" aria-label="Painel admin">
+          <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2l3.09 6.26L22 9l-5 4.87L18.18 21 12 17.77 5.82 21 7 13.87 2 9l6.91-.74L12 2z"></path>
+          </svg>
+          <span class="menu-label">Admin</span>
+        </RouterLink>
 
         <RouterLink v-if="isAuthenticated" to="/profile" class="profile-link menu-item" aria-label="Meu perfil">
           <img
@@ -144,7 +152,7 @@ function goToProtected(path) {
         href="/my/products"
         class="menu-item"
         @click.prevent="goToProtected('/my/products')"
-        aria-label="Meus anuncios"
+        aria-label="Meus anúncios"
       >
         <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 7h18"></path>
@@ -152,6 +160,12 @@ function goToProtected(path) {
           <path d="M5 7l1 13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-13"></path>
         </svg>
       </a>
+
+      <RouterLink v-if="isAdmin" to="/admin" class="menu-item" aria-label="Painel admin">
+        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2l3.09 6.26L22 9l-5 4.87L18.18 21 12 17.77 5.82 21 7 13.87 2 9l6.91-.74L12 2z"></path>
+        </svg>
+      </RouterLink>
 
       <RouterLink v-if="isAuthenticated" to="/profile" class="profile-link menu-item" aria-label="Meu perfil">
         <img

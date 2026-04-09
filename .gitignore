@@ -24,4 +24,7 @@ dist-ssr
 *.sw?
 .env
 cors.json
-*.txt
+message.txt
+unibrik_admin.json
+promote-admin.mjs
+current-rules.txt

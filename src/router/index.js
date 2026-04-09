@@ -11,12 +11,18 @@ import ProductEditView from '../views/ProductEditView.vue'
 import MyProductsView from '../views/MyProductsView.vue'
 import FavoritesView from '../views/FavoritesView.vue'
 import ChatView from '../views/ChatView.vue'
+import AdminPanelView from '../views/AdminPanelView.vue'
+import BannedView from '../views/BannedView.vue'
+import NotFoundView from '../views/NotFoundView.vue'
 import {
+  AUTH_ERROR_KIND_BLACKLISTED,
   AUTH_ERROR_KIND_DOMAIN_RESTRICTED,
   getCurrentUser,
   getLoginDomainRestrictionMessage,
   initAuth,
+  isAdminSession,
   isLoginEmailAllowed,
+  refreshCurrentUserAccess,
   setAuthErrorMessage,
   signOutUser,
   waitForAuthInit,
@@ -77,7 +83,15 @@ const routes = [
     component: ChatView,
     meta: { requiresAuth: true },
   },
-  { path: '/:pathMatch(.*)*', redirect: '/' },
+  {
+    path: '/admin',
+    name: 'admin-panel',
+    component: AdminPanelView,
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  { path: '/banned', name: 'banned', component: BannedView },
+  { path: '/404', name: 'not-found', component: NotFoundView },
+  { path: '/:pathMatch(.*)*', redirect: '/404' },
 ]
 
 const router = createRouter({
@@ -93,20 +107,43 @@ router.beforeEach(async (to) => {
 
   const user = getCurrentUser()
 
-  if (user && !isLoginEmailAllowed(user.email)) {
-    setAuthErrorMessage(
-      getLoginDomainRestrictionMessage(user.email),
-      AUTH_ERROR_KIND_DOMAIN_RESTRICTED,
-      user.email,
-    )
+  if (user) {
+    const access = await refreshCurrentUserAccess(user, { force: true })
 
-    try {
-      await signOutUser()
-    } catch {
-      // No-op: route guard still blocks access when domain is not allowed.
+    if (access.isBlacklisted) {
+      const reason = String(access.blacklistEntry?.reason || '').trim()
+      const message = reason
+        ? `Sua conta foi bloqueada pela administração. Motivo: ${reason}`
+        : 'Sua conta foi bloqueada pela administração e não pode acessar a plataforma.'
+
+      setAuthErrorMessage(message, AUTH_ERROR_KIND_BLACKLISTED, user.email)
+
+      if (to.name !== 'banned') {
+        return { name: 'banned' }
+      }
+
+      return true
     }
 
-    return { name: 'login', query: { redirect: to.fullPath } }
+    if (!isLoginEmailAllowed(user.email) && !access.isAdmin) {
+      setAuthErrorMessage(
+        getLoginDomainRestrictionMessage(user.email),
+        AUTH_ERROR_KIND_DOMAIN_RESTRICTED,
+        user.email,
+      )
+
+      try {
+        await signOutUser()
+      } catch {
+        // No-op: route guard still blocks access when domain is not allowed.
+      }
+
+      return { name: 'login', query: { redirect: to.fullPath } }
+    }
+
+    if (to.name === 'banned') {
+      return { name: 'home' }
+    }
   }
 
   if (user) {
@@ -127,6 +164,10 @@ router.beforeEach(async (to) => {
 
   if (!user) {
     return { name: 'login', query: { redirect: to.fullPath } }
+  }
+
+  if (to.meta.requiresAdmin && !isAdminSession.value) {
+    return { name: 'home' }
   }
 
   return true

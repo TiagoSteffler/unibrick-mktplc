@@ -92,7 +92,7 @@ function removePhoto() {
 
 function handleUseGooglePhoto() {
   if (!user.value?.photoURL) {
-    error.value = 'Nenhuma foto disponivel no Google.'
+    error.value = 'Nenhuma foto disponível no Google.'
     return
   }
   form.photoURL = user.value.photoURL
@@ -126,7 +126,7 @@ async function handleSubmit() {
 
   if (!fullName || !gender || !neighborhood || !hometown || !universityRole) {
     error.value =
-      'Preencha nome completo, sexo, bairro, cidade natal e curso/ocupacao na universidade para continuar.'
+      'Preencha nome completo, sexo, bairro, cidade natal e curso/ocupação na universidade para continuar.'
     return
   }
 
@@ -151,10 +151,10 @@ async function handleSubmit() {
     })
 
     redirectAfterSave.value = String(route.query.redirect || '/profile')
-    successModalTitle.value = isEditMode.value ? 'Perfil atualizado' : 'Cadastro concluido'
+    successModalTitle.value = isEditMode.value ? 'Perfil atualizado' : 'Cadastro concluído'
     successModalMessage.value = isEditMode.value
-      ? 'Suas alteracoes de perfil foram salvas com sucesso.'
-      : 'Seu cadastro foi concluido com sucesso. Sua conta esta pronta para uso.'
+      ? 'Suas alterações de perfil foram salvas com sucesso.'
+      : 'Seu cadastro foi concluído com sucesso. Sua conta está pronta para uso.'
     showSuccessModal.value = true
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Falha ao salvar cadastro.'
@@ -193,10 +193,10 @@ onMounted(() => {
 
     <h1>{{ isEditMode ? 'Editar cadastro' : 'Complete seu cadastro' }}</h1>
     <p class="muted" style="margin-top: 8px">
-      Informe seus dados para liberar as funcoes de perfil e anuncios.
-      <span v-if="!isEditMode"> Concluir este cadastro e obrigatorio para continuar.</span>
+      Informe seus dados para liberar as funções de perfil e anúncios.
+      <span v-if="!isEditMode"> Concluir este cadastro é obrigatório para continuar.</span>
     </p>
-    <p class="required-fields-hint">Campos com <strong class="required-indicator">*</strong> sao obrigatorios.</p>
+    <p class="required-fields-hint">Campos com <strong class="required-indicator">*</strong> sao obrigatórios.</p>
 
     <form class="grid profile-form" @submit.prevent="handleSubmit" :aria-busy="isBusy">
       <label class="field">
@@ -221,7 +221,7 @@ onMounted(() => {
       </label>
 
       <label class="field">
-        <span>Bairro de residencia para retirada <strong class="required-indicator">*</strong></span>
+        <span>Bairro de residência para retirada <strong class="required-indicator">*</strong></span>
         <input
           v-model="form.neighborhood"
           type="text"
@@ -249,13 +249,13 @@ onMounted(() => {
           {{
             isLoadingHometownOptions
               ? 'Carregando cidades do Brasil...'
-              : 'Digite para filtrar as opcoes. Formato sugerido: Cidade - UF.'
+              : 'Digite para filtrar as opções. Formato sugerido: Cidade - UF.'
           }}
         </small>
       </label>
 
       <label class="field">
-        <span>Curso/Ocupacao na universidade <strong class="required-indicator">*</strong></span>
+        <span>Curso/Ocupação na universidade <strong class="required-indicator">*</strong></span>
         <input
           v-model="form.universityRole"
           type="text"
@@ -271,7 +271,7 @@ onMounted(() => {
           v-model="form.aboutMe"
           rows="4"
           maxlength="300"
-          placeholder="Conte um pouco sobre voce"
+          placeholder="Conte um pouco sobre você"
         ></textarea>
         <small class="muted">{{ form.aboutMe.length }}/300</small>
       </label>
@@ -327,7 +327,7 @@ onMounted(() => {
           Cancelar
         </button>
         <button class="btn" type="submit" :disabled="isSaving">
-          {{ isSaving ? 'Salvando...' : isEditMode ? 'Salvar alteracoes' : 'Concluir cadastro' }}
+          {{ isSaving ? 'Salvando...' : isEditMode ? 'Salvar alterações' : 'Concluir cadastro' }}
         </button>
       </div>
     </form>
@@ -339,7 +339,7 @@ onMounted(() => {
       variant="info"
       :title="successModalTitle"
       :message="successModalMessage"
-      :details="['Voce sera redirecionado para a proxima etapa ao confirmar.']"
+      :details="['Você será redirecionado para a próxima etapa ao confirmar.']"
       confirm-text="Continuar"
       :show-cancel="false"
       @confirm="handleProfileSuccessConfirm"

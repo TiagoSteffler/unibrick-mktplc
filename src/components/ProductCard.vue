@@ -5,6 +5,24 @@ defineProps({
     required: true,
   },
 })
+
+function getModerationLabel(product) {
+  const status = String(product?.moderationStatus || 'approved').toLowerCase()
+
+  if (status === 'pending') {
+    return 'Aguardando aprovação'
+  }
+
+  if (status === 'reported') {
+    return 'Reportado para revisão'
+  }
+
+  if (status === 'rejected') {
+    return 'Rejeitado'
+  }
+
+  return 'Publicado'
+}
 </script>
 
 <template>
@@ -12,6 +30,8 @@ defineProps({
     <img :src="product.photos[0] || 'https://placehold.co/800x500?text=Sem+Foto'" :alt="product.title" class="cover" />
 
     <div class="content">
+      <p v-if="product.isAdminPost" class="admin-badge">Publicado pela administração</p>
+      <p v-if="getModerationLabel(product)" class="moderation-badge" :class="{ 'pending': product.moderationStatus === 'pending', 'reported': product.moderationStatus === 'reported', 'rejected': product.moderationStatus === 'rejected', 'approved': product.moderationStatus === 'approved' }">{{ getModerationLabel(product) }}</p>
       <p class="muted">{{ product.category }}</p>
       <h3>{{ product.title }}</h3>
       <p class="price">R$ {{ product.price.toFixed(2) }}</p>
@@ -50,4 +70,39 @@ defineProps({
   font-size: 18px;
   color: #0f172a;
 }
+
+.admin-badge,
+.moderation-badge,
+.approved-badge,
+.rejected-badge {
+  margin: 0;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.admin-badge {
+  background: #cffafe;
+  color: #155e75;
+}
+
+.moderation-badge.pending,
+.moderation-badge.reported {
+  background: #fff7ed;
+  color: #9a6f12;
+}
+
+.moderation-badge.approved {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.moderation-badge.rejected {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 </style>

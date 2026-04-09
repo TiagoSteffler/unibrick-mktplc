@@ -108,8 +108,11 @@ async function handleLogout() {
       <p class="muted" v-if="isFirebaseConfigured && isLoginDomainRestrictionEnabled">
         Login restrito para emails de: {{ allowedLoginDomainsText }}.
       </p>
+      <p class="muted" v-if="isFirebaseConfigured && isLoginDomainRestrictionEnabled">
+        Exceção: conta administradora cadastrada manualmente em admin_users com domínio @gmail.com.
+      </p>
       <p class="muted" v-if="!isFirebaseConfigured">
-        Firebase nao configurado: login demo local habilitado para desenvolvimento.
+        Firebase não configurado: login demo local habilitado para desenvolvimento.
       </p>
 
       <div v-if="!user" class="action-row">
@@ -124,7 +127,7 @@ async function handleLogout() {
         </button>
       </div>
       <div v-else class="stack-sm">
-        <p>Voce esta logado como <strong>{{ user.displayName }}</strong> ({{ user.email }})</p>
+        <p>Você está logado como <strong>{{ user.displayName }}</strong> ({{ user.email }})</p>
         <div class="action-row">
           <RouterLink to="/profile" class="btn">Ir para meu perfil</RouterLink>
           <button class="btn secondary" type="button" @click="handleLogout">Sair</button>

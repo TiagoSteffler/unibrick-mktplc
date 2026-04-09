@@ -16,9 +16,34 @@ const isSubmitting = ref(false)
 const showSuccessModal = ref(false)
 const photos = ref([])
 const previewPhotos = ref([])
+const wasSavedLocally = ref(false)
+const submittedModerationStatus = ref('approved')
 const MAX_PHOTOS = 5
 
 const isBusy = computed(() => isSubmitting.value)
+const successModalTitle = computed(() =>
+  wasSavedLocally.value ? 'Anúncio salvo localmente' : 'Anúncio publicado',
+)
+const successModalMessage = computed(() =>
+  wasSavedLocally.value
+    ? 'Não foi possível enviar imagens ao Firebase Storage. O anúncio foi salvo apenas neste navegador.'
+    : submittedModerationStatus.value === 'pending'
+      ? 'Seu anúncio foi enviado e agora aguarda aprovação da administração.'
+      : 'Seu anúncio foi publicado com sucesso.',
+)
+const successModalDetails = computed(() =>
+  wasSavedLocally.value
+    ? [
+        'Verifique regras/CORS do Firebase Storage para sincronizar novos anúncios com a nuvem.',
+        'Depois da correção, cadastre novamente para publicar no Firestore.',
+      ]
+    : submittedModerationStatus.value === 'pending'
+      ? [
+          'Enquanto estiver pendente, somente você e administradores conseguem visualizar o anúncio.',
+          'Assim que for aprovado, ele aparecerá para todos na busca e na página inicial.',
+        ]
+      : ['As fotos foram processadas e salvas.', 'Você já pode gerenciar o anúncio em Meus Produtos.'],
+)
 
 const dynamicRetrievalLocation = computed(() => {
   const customLocation = userProfile.value?.neighborhood || ''
@@ -119,7 +144,7 @@ async function processSelectedPhotos(selected) {
   const availableSlots = MAX_PHOTOS - photos.value.length
 
   if (availableSlots <= 0) {
-    error.value = `Voce pode enviar no maximo ${MAX_PHOTOS} fotos.`
+    error.value = `Você pode enviar no máximo ${MAX_PHOTOS} fotos.`
     return
   }
 
@@ -164,23 +189,25 @@ async function submitProduct() {
   }
 
   error.value = ''
+  wasSavedLocally.value = false
+  submittedModerationStatus.value = 'approved'
 
   if (photos.value.length < 1) {
-    error.value = 'Inclua pelo menos uma foto para publicar o anuncio.'
+    error.value = 'Inclua pelo menos uma foto para publicar o anúncio.'
     return
   }
 
   const numericPrice = Number(form.price)
 
   if (!Number.isFinite(numericPrice) || numericPrice < 0 || numericPrice > 9999.99) {
-    error.value = 'O preco deve estar entre R$ 0,00 e R$ 9.999,99.'
+    error.value = 'O preço deve estar entre R$ 0,00 e R$ 9.999,99.'
     return
   }
 
   isSubmitting.value = true
 
   try {
-    await createProduct(
+    const created = await createProduct(
       {
         title: form.title,
         price: Number(form.price),
@@ -194,6 +221,10 @@ async function submitProduct() {
       },
       user.value,
     )
+
+    wasSavedLocally.value =
+      created?.storageMode === 'local-fallback' || created?.storageMode === 'local'
+    submittedModerationStatus.value = String(created?.moderationStatus || 'approved')
 
     resetForm()
     showSuccessModal.value = true
@@ -213,12 +244,12 @@ async function submitProduct() {
       <fieldset class="product-fieldset" :disabled="isBusy">
         <div class="stack-md">
         <label class="field">
-          <span>Titulo do anuncio</span>
+          <span>Título do anúncio</span>
           <input v-model="form.title" type="text" required placeholder="Ex.: Notebook Acer" />
         </label>
 
         <label class="field">
-          <span>Descricao</span>
+          <span>Descrição</span>
           <textarea
             v-model="form.description"
             rows="6"
@@ -228,7 +259,7 @@ async function submitProduct() {
         </label>
 
         <label class="field">
-          <span>Preco</span>
+          <span>Preço</span>
           <input 
             v-model="form.priceDisplay" 
             type="text" 
@@ -249,7 +280,7 @@ async function submitProduct() {
         </label>
 
         <label class="field">
-          <span>Estado de conservacao</span>
+          <span>Estado de conservação</span>
           <select v-model="form.condition" required>
             <option value="usado">Usado</option>
             <option value="novo">Novo</option>
@@ -257,7 +288,7 @@ async function submitProduct() {
         </label>
         
         <fieldset class="field" style="border: none; padding: 0; margin-top: 8px;">
-          <legend style="margin-bottom: 8px;">Metodos de entrega</legend>
+          <legend style="margin-bottom: 8px;">Métodos de entrega</legend>
           <div style="display: flex; gap: 16px;">
             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
               <input type="checkbox" v-model="form.deliveryOptions.delivery" />
@@ -298,7 +329,7 @@ async function submitProduct() {
                 @drop.prevent="handlePhotoDrop"
               ></span>
               <strong>Arraste ou clique para selecionar</strong>
-              <small class="muted">Minimo 1 foto e maximo {{ MAX_PHOTOS }} arquivos.</small>
+              <small class="muted">Mínimo 1 foto e máximo {{ MAX_PHOTOS }} arquivos.</small>
             </label>
           </div>
 
@@ -323,7 +354,7 @@ async function submitProduct() {
 
     <div v-if="isSubmitting" class="loading-overlay" aria-live="polite">
       <span class="spinner" aria-hidden="true"></span>
-      <p>Enviando imagens e salvando anuncio...</p>
+      <p>Enviando imagens e salvando anúncio...</p>
     </div>
 
     <p v-if="error" class="status-message error">{{ error }}</p>
@@ -331,9 +362,9 @@ async function submitProduct() {
     <AppModal
       v-model="showSuccessModal"
       variant="info"
-      title="Anuncio publicado"
-      message="Seu anuncio foi publicado com sucesso."
-      :details="['As fotos foram processadas e salvas.', 'Voce ja pode gerenciar o anuncio em Meus Produtos.']"
+      :title="successModalTitle"
+      :message="successModalMessage"
+      :details="successModalDetails"
       confirm-text="Ir para meus produtos"
       cancel-text="Continuar aqui"
       @confirm="goToMyProducts"

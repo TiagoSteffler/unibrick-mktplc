@@ -13,7 +13,7 @@ function formatDate(value) {
   const parsed = new Date(value)
 
   if (Number.isNaN(parsed.getTime())) {
-    return value || 'Nao informado'
+    return value || 'Não informado'
   }
 
   return parsed.toLocaleDateString('pt-BR')
@@ -61,18 +61,18 @@ onMounted(() => {
 
         <div class="seller-info">
           <h1>{{ seller.name }}</h1>
-          <p><strong>Cidade natal:</strong> {{ seller.city || 'Nao informado' }}</p>
-          <p><strong>Curso/Ocupacao:</strong> {{ seller.universityRole || 'Nao informado' }}</p>
+          <p><strong>Cidade natal:</strong> {{ seller.city || 'Não informado' }}</p>
+          <p><strong>Curso/Ocupação:</strong> {{ seller.universityRole || 'Não informado' }}</p>
           <p><strong>Desde:</strong> {{ formatDate(seller.joinedAt) }}</p>
           <p class="seller-about-row">
             <strong>Sobre mim:</strong>
-            <span class="about-text">{{ seller.about || 'Nao Disponivel' }}</span>
+            <span class="about-text">{{ seller.about || 'Não Disponível' }}</span>
           </p>
         </div>
       </div>
     </article>
 
-    <p v-else class="card muted">Vendedor nao encontrado.</p>
+    <p v-else class="card muted">Vendedor não encontrado.</p>
 
     <div v-if="seller" class="seller-products-head">
       <h2>Produtos deste vendedor</h2>

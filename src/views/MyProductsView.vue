@@ -12,6 +12,24 @@ const isDeleting = ref(false)
 const showDeleteModal = ref(false)
 const productIdToDelete = ref('')
 
+function getModerationStatusLabel(product) {
+  const status = String(product?.moderationStatus || 'approved').toLowerCase()
+
+  if (status === 'pending') {
+    return 'Aguardando aprovação'
+  }
+
+  if (status === 'reported') {
+    return 'Reportado para revisão'
+  }
+
+  if (status === 'rejected') {
+    return 'Rejeitado pela administração'
+  }
+
+  return 'Publicado'
+}
+
 async function loadMyProducts() {
   isLoading.value = true
 
@@ -61,14 +79,14 @@ onMounted(() => {
         <h1>Meus Produtos Cadastrados</h1>
         <RouterLink class="btn" to="/product/new">Cadastrar Produto</RouterLink>
       </div>
-      <p class="muted">Lista de anuncios vinculados a sua conta.</p>
+      <p class="muted">Lista de anúncios vinculados a sua conta.</p>
     </div>
 
     <section class="loading-section my-products-grid-wrap">
       <div v-if="isLoading || isDeleting" class="section-loading-overlay" aria-live="polite">
         <span class="spinner" aria-hidden="true"></span>
-        <p v-if="isDeleting">Excluindo anuncio...</p>
-        <p v-else>Carregando meus anuncios...</p>
+        <p v-if="isDeleting">Excluindo anúncio...</p>
+        <p v-else>Carregando meus anúncios...</p>
       </div>
 
       <section class="grid products" v-if="products.length">
@@ -81,14 +99,14 @@ onMounted(() => {
         </article>
       </section>
 
-      <p v-else class="card muted">Voce ainda nao cadastrou produtos.</p>
+      <p v-else class="card muted">Você ainda não cadastrou produtos.</p>
 
       <AppModal
         v-model="showDeleteModal"
         variant="danger"
-        title="Excluir anuncio"
-        message="Tem certeza que deseja excluir este anuncio? Esta acao nao pode ser desfeita."
-        confirm-text="Excluir anuncio"
+        title="Excluir anúncio"
+        message="Tem certeza que deseja excluir este anúncio? Esta ação não pode ser desfeita."
+        confirm-text="Excluir anúncio"
         cancel-text="Cancelar"
         @confirm="confirmDeleteProduct"
       />
@@ -112,8 +130,14 @@ h1 {
 .actions-row {
   padding: 10px 12px;
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.product-status {
+  margin: 0;
+  margin-right: auto;
 }
 
 .btn.danger {
