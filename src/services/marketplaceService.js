@@ -13,7 +13,6 @@ import {
 } from 'firebase/firestore'
 import { getIdTokenResult } from 'firebase/auth'
 import { deleteObject, getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage'
-import homeMessageTemplateRaw from '../../message.txt?raw'
 import {
   app,
   auth,
@@ -45,7 +44,6 @@ const HOME_MESSAGE_KEY = 'marketplace_home_message'
 const configuredAdminEmails = parseAdminEmails(
   `${import.meta.env.VITE_ADMIN_EMAIL || ''},${import.meta.env.VITE_ADMIN_EMAILS || ''}`,
 )
-const defaultHomeMessage = parseHomeMessageTemplate(homeMessageTemplateRaw)
 
 // Cache em memória para produtos
 const productCache = new Map()
@@ -2294,7 +2292,6 @@ export async function getHomeMessage() {
     return null
   }
 
-  return defaultHomeMessage?.enabled ? { ...defaultHomeMessage } : null
 }
 
 export async function saveHomeMessageByAdmin(adminUser, payload = {}) {
