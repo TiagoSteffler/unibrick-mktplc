@@ -4,6 +4,10 @@ defineProps({
     type: Object,
     required: true,
   },
+  showModerationLabel: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 function getModerationLabel(product) {
@@ -31,7 +35,7 @@ function getModerationLabel(product) {
 
     <div class="content">
       <p v-if="product.isAdminPost" class="admin-badge">Publicado pela administração</p>
-      <p v-if="getModerationLabel(product)" class="moderation-badge" :class="{ 'pending': product.moderationStatus === 'pending', 'reported': product.moderationStatus === 'reported', 'rejected': product.moderationStatus === 'rejected', 'approved': product.moderationStatus === 'approved' }">{{ getModerationLabel(product) }}</p>
+      <p v-if="showModerationLabel && getModerationLabel(product)" class="moderation-badge" :class="{ 'pending': product.moderationStatus === 'pending', 'reported': product.moderationStatus === 'reported', 'rejected': product.moderationStatus === 'rejected', 'approved': product.moderationStatus === 'approved' }">{{ getModerationLabel(product) }}</p>
       <p class="muted">{{ product.category }}</p>
       <h3>{{ product.title }}</h3>
       <p class="price">R$ {{ product.price.toFixed(2) }}</p>

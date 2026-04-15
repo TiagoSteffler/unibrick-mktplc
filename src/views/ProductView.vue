@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authState, isAdminSession } from '../services/authService'
 import { getProductById, isFavorite, reportProduct, toggleFavorite } from '../services/marketplaceService'
@@ -20,8 +20,11 @@ const thumbsLoaded = ref({})
 const isReporting = ref(false)
 const showReportModal = ref(false)
 const selectedReportReason = ref('')
-const reportStatusMessage = ref('')
-const reportStatusIsError = ref(false)
+const reportErrorMessage = ref('')
+const showReportSuccessModal = ref(false)
+const reportSuccessMessage = ref('')
+const showRejectedByAdminModal = ref(false)
+const dismissedRejectedByAdminModal = ref(false)
 
 const reportOptions = [
   'Golpe',
@@ -120,18 +123,14 @@ const showModerationStatus = computed(() => {
   return isOwnProduct.value || isAdminSession.value
 })
 
-const invalidProductPolicyMessage = computed(() => {
+const rejectedOwnProductReason = computed(() => {
   if (!product.value || product.value.moderationStatus !== 'rejected') {
     return ''
   }
 
-  const reason = String(product.value.moderationReason || '').trim() || 'Não informado'
-  return `Anúncio denunciado por: ${reason}. Altere o anúncio para que possa ser avaliado novamente e publicado se estiver de acordo com as políticas da plataforma.`
+  const reason = String(product.value.moderationReason || product.value.reportReason || '').trim()
+  return reason || 'Não informado'
 })
-
-const showInvalidProductPolicyMessage = computed(() =>
-  Boolean(invalidProductPolicyMessage.value) && (isOwnProduct.value || isAdminSession.value),
-)
 
 async function loadProduct() {
   isLoading.value = true
@@ -149,6 +148,7 @@ async function loadProduct() {
       product.value.photos.map((photo, index) => [buildThumbKey(photo, index), false]),
     )
     resetPhotoZoom()
+    dismissedRejectedByAdminModal.value = false
 
     if (product.value && user.value) {
       favorite.value = await isFavorite(user.value, product.value.id)
@@ -265,16 +265,37 @@ function openReportModal() {
   }
 
   selectedReportReason.value = ''
+  reportErrorMessage.value = ''
   showReportModal.value = true
 }
 
-function closeReportModal() {
-  if (isReporting.value) {
+function closeReportModal(options = {}) {
+  if (isReporting.value && !options.force) {
     return
   }
 
   showReportModal.value = false
   selectedReportReason.value = ''
+  reportErrorMessage.value = ''
+}
+
+function closeReportSuccessModal() {
+  showReportSuccessModal.value = false
+  reportSuccessMessage.value = ''
+}
+
+function closeRejectedByAdminModal() {
+  dismissedRejectedByAdminModal.value = true
+  showRejectedByAdminModal.value = false
+}
+
+function editCurrentProduct() {
+  if (!product.value?.id) {
+    return
+  }
+
+  closeRejectedByAdminModal()
+  router.push(`/product/${product.value.id}/edit`)
 }
 
 async function submitReport() {
@@ -283,18 +304,19 @@ async function submitReport() {
   }
 
   isReporting.value = true
-  reportStatusMessage.value = ''
-  reportStatusIsError.value = false
+  reportErrorMessage.value = ''
+
+  const selectedReason = selectedReportReason.value
 
   try {
-    await reportProduct(product.value.id, user.value, selectedReportReason.value)
-    closeReportModal()
-    reportStatusMessage.value =
-      'Obrigado pela denúncia. Ela será repassada a administração para devidas providências, se aplicável.'
+    await reportProduct(product.value.id, user.value, selectedReason)
+    closeReportModal({ force: true })
+    reportSuccessMessage.value =
+      `Obrigado pela denúncia. Ela será repassada a administração para devidas providências, se aplicável.\nMotivo: ${selectedReason}`
+    showReportSuccessModal.value = true
     await loadProduct()
   } catch (err) {
-    reportStatusMessage.value = err instanceof Error ? err.message : 'Falha ao reportar anúncio.'
-    reportStatusIsError.value = true
+    reportErrorMessage.value = err instanceof Error ? err.message : 'Falha ao reportar anúncio.'
   } finally {
     isReporting.value = false
   }
@@ -332,6 +354,26 @@ function openSellerChat() {
 onMounted(() => {
   loadProduct()
 })
+
+watch(
+  () => [product.value?.id || '', product.value?.moderationStatus || '', isOwnProduct.value],
+  () => {
+    const shouldShow = Boolean(
+      product.value && product.value.moderationStatus === 'rejected' && isOwnProduct.value,
+    )
+
+    if (!shouldShow) {
+      showRejectedByAdminModal.value = false
+      dismissedRejectedByAdminModal.value = false
+      return
+    }
+
+    if (!dismissedRejectedByAdminModal.value) {
+      showRejectedByAdminModal.value = true
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -437,23 +479,13 @@ onMounted(() => {
         <p v-if="deliveryMethods.length"><strong>{{ deliveryMethods.join(' | ') }}</strong> </p>
       </div>
 
-      <p v-if="showInvalidProductPolicyMessage" class="muted" style="color: #b45309; line-height: 1.5">
-        {{ invalidProductPolicyMessage }}
-      </p>
-
-      <p
-        v-if="reportStatusMessage"
-        class="muted"
-        :style="reportStatusIsError ? 'color: #b91c1c' : 'color: #166534'"
-      >
-        {{ reportStatusMessage }}
-      </p>
-
       <div class="product-bottom-actions">
         <button class="btn secondary" type="button" @click="openSellerChat">
           {{ isOwnProduct ? 'Minhas conversas' : 'Falar com Vendedor' }}
         </button>
-        <RouterLink class="btn" :to="`/seller/${product.sellerId}`">Ver vendedor</RouterLink>
+        <RouterLink class="btn" :to="isOwnProduct ? `/product/${product.id}/edit` : `/seller/${product.sellerId}`">
+          {{ isOwnProduct ? 'Editar anúncio' : 'Ver vendedor' }}
+        </RouterLink>
       </div>
 
     </article>
@@ -538,9 +570,17 @@ onMounted(() => {
           <p class="report-modal-message">Selecione um motivo para a denúncia:</p>
 
           <label v-for="option in reportOptions" :key="option" class="report-option-row">
-            <input v-model="selectedReportReason" type="radio" :value="option" :disabled="isReporting" />
             <span>{{ option }}</span>
+            <input
+              v-model="selectedReportReason"
+              class="report-option-input"
+              type="radio"
+              :value="option"
+              :disabled="isReporting"
+            />
           </label>
+
+          <p v-if="reportErrorMessage" class="report-modal-error">{{ reportErrorMessage }}</p>
         </div>
 
         <footer class="report-modal-actions">
@@ -555,6 +595,58 @@ onMounted(() => {
           >
             {{ isReporting ? 'Submetendo...' : 'Submeter' }}
           </button>
+        </footer>
+      </article>
+    </div>
+  </Teleport>
+
+  <Teleport to="body">
+    <div
+      v-if="showReportSuccessModal"
+      class="report-modal-overlay"
+      role="presentation"
+      @click="closeReportSuccessModal"
+    >
+      <article class="report-modal-card success" role="dialog" aria-modal="true" @click.stop>
+        <header class="report-modal-header">
+          <h2>Denúncia enviada</h2>
+        </header>
+
+        <div class="report-modal-content">
+          <p class="report-modal-message">{{ reportSuccessMessage }}</p>
+        </div>
+
+        <footer class="report-modal-actions report-modal-actions-center">
+          <button class="btn" type="button" @click="closeReportSuccessModal">Fechar</button>
+        </footer>
+      </article>
+    </div>
+  </Teleport>
+
+  <Teleport to="body">
+    <div
+      v-if="showRejectedByAdminModal && rejectedOwnProductReason"
+      class="report-modal-overlay"
+      role="presentation"
+      @click="closeRejectedByAdminModal"
+    >
+      <article class="report-modal-card warning" role="dialog" aria-modal="true" @click.stop>
+        <header class="report-modal-header">
+          <h2>Aviso de moderação</h2>
+        </header>
+
+        <div class="report-modal-content">
+          <p class="report-modal-message">Anúncio rejeitado ou denunciado pela administração.</p>
+          <p class="report-modal-message"><strong>Motivo: {{ rejectedOwnProductReason }}.</strong></p>
+          <p class="report-modal-message">
+            Altere o anúncio para que possa ser avaliado novamente e publicado se estiver de acordo
+            com as políticas da plataforma.
+          </p>
+        </div>
+
+        <footer class="report-modal-actions">
+          <button class="btn secondary" type="button" @click="editCurrentProduct">Editar</button>
+          <button class="btn" type="button" @click="closeRejectedByAdminModal">Fechar</button>
         </footer>
       </article>
     </div>
@@ -640,19 +732,39 @@ onMounted(() => {
   padding: 2px 16px 14px;
   display: grid;
   gap: 10px;
+  text-align: left;
 }
 
 .report-modal-message {
   margin: 0;
   color: #1e293b;
   line-height: 1.5;
+  white-space: pre-line;
 }
 
 .report-option-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
   color: #0f172a;
+}
+
+.report-option-input {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.report-modal-error {
+  margin: 0;
+  color: #b91c1c;
+  line-height: 1.5;
 }
 
 .report-modal-actions {
@@ -662,5 +774,17 @@ onMounted(() => {
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.report-modal-actions-center {
+  justify-content: center;
+}
+
+.report-modal-card.success {
+  border-top-color: #16a34a;
+}
+
+.report-modal-card.warning {
+  border-top-color: #d97706;
 }
 </style>

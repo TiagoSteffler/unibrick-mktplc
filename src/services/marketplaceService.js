@@ -2146,8 +2146,10 @@ export async function toggleFavorite(user, productId) {
   return !exists
 }
 
-function toModerationFields(product) {
-  return {
+function toModerationFields(product, options = {}) {
+  const includeIsAdminPost = options.includeIsAdminPost !== false
+
+  const payload = {
     moderationStatus: product.moderationStatus,
     moderationReason: product.moderationReason,
     moderationUpdatedAt: product.moderationUpdatedAt,
@@ -2157,11 +2159,16 @@ function toModerationFields(product) {
     reportedAt: product.reportedAt,
     reportedByUid: product.reportedByUid,
     reportedByEmail: product.reportedByEmail,
-    isAdminPost: product.isAdminPost,
   }
+
+  if (includeIsAdminPost) {
+    payload.isAdminPost = product.isAdminPost
+  }
+
+  return payload
 }
 
-async function applyModerationUpdate(productId, updater) {
+async function applyModerationUpdate(productId, updater, options = {}) {
   if (isFirebaseConfigured && db) {
     const reference = doc(db, PRODUCTS_COLLECTION, String(productId))
     const snapshot = await getDoc(reference)
@@ -2173,7 +2180,7 @@ async function applyModerationUpdate(productId, updater) {
     const current = normalizeProduct({ id: snapshot.id, ...snapshot.data() })
     const updated = normalizeProduct(updater(current))
 
-    await updateDoc(reference, toModerationFields(updated))
+    await updateDoc(reference, toModerationFields(updated, options))
     setCachedProduct(productId, updated)
     return updated
   }
@@ -2350,18 +2357,22 @@ export async function reportProduct(productId, reporterUser, reason = '') {
 
   const reportReason = String(reason || '').trim().slice(0, 400)
 
-  return applyModerationUpdate(productId, (existing) => ({
-    ...existing,
-    moderationStatus: 'reported',
-    moderationReason: '',
-    moderationUpdatedAt: new Date().toISOString(),
-    moderationUpdatedByUid: '',
-    moderationUpdatedByEmail: '',
-    reportReason: reportReason || 'Sem descrição adicional.',
-    reportedAt: new Date().toISOString(),
-    reportedByUid: reporterUser.uid,
-    reportedByEmail: reporterUser.email,
-  }))
+  return applyModerationUpdate(
+    productId,
+    (existing) => ({
+      ...existing,
+      moderationStatus: 'reported',
+      moderationReason: '',
+      moderationUpdatedAt: new Date().toISOString(),
+      moderationUpdatedByUid: '',
+      moderationUpdatedByEmail: '',
+      reportReason: reportReason || 'Sem descrição adicional.',
+      reportedAt: new Date().toISOString(),
+      reportedByUid: reporterUser.uid,
+      reportedByEmail: reporterUser.email,
+    }),
+    { includeIsAdminPost: false },
+  )
 }
 
 export async function approveProductByAdmin(productId, adminUser) {

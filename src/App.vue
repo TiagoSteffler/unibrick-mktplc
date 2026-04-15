@@ -23,7 +23,9 @@ const profilePhoto = computed(() => {
   const profile = getUserProfile(currentUser)
   return profile?.photoURL || ''
 })
-const isProfileSetupFlow = computed(() => route.name === 'profile-setup')
+const hideNavigationChrome = computed(() => {
+  return route.name === 'profile-setup' || route.name === 'login'
+})
 
 watch(
   () => route.query.q,
@@ -56,7 +58,7 @@ function goToProtected(path) {
 
 <template>
   <div class="app-shell">
-    <header v-if="!isProfileSetupFlow" class="topbar">
+    <header v-if="!hideNavigationChrome" class="topbar">
       <div class="topbar-main">
         <RouterLink to="/" class="brand">
           <img :src="appLogo" alt="UniBrik" class="brand-logo" />
@@ -135,7 +137,7 @@ function goToProtected(path) {
       </nav>
     </header>
 
-    <nav v-if="!isProfileSetupFlow" class="mobile-bottom-menu" aria-label="Navegacao mobile">
+    <nav v-if="!hideNavigationChrome" class="mobile-bottom-menu" aria-label="Navegacao mobile">
       <a href="/chat" class="menu-item" @click.prevent="goToProtected('/chat')" aria-label="Chat">
         <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H7l-4 3v-5.5A8.5 8.5 0 1 1 21 11.5z"></path>
@@ -188,7 +190,7 @@ function goToProtected(path) {
       </RouterLink>
     </nav>
 
-    <main class="page-wrap" :class="{ 'page-wrap-onboarding': isProfileSetupFlow }">
+    <main class="page-wrap" :class="{ 'page-wrap-onboarding': hideNavigationChrome }">
       <RouterView />
     </main>
   </div>

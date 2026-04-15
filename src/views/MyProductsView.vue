@@ -91,7 +91,7 @@ onMounted(() => {
 
       <section class="grid products" v-if="products.length">
         <article class="grid" style="gap: 8px" v-for="product in products" :key="product.id">
-          <ProductCard :product="product" />
+          <ProductCard :product="product" :showModerationLabel="true" />
           <div class="card actions-row">
             <RouterLink class="btn secondary" :to="`/product/${product.id}/edit`">Editar</RouterLink>
             <button class="btn danger" type="button" @click="handleDelete(product.id)">Excluir</button>
