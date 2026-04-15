@@ -2,7 +2,12 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authState } from '../services/authService'
-import { getMyProducts, getProductById, getSellerById } from '../services/marketplaceService'
+import {
+  getMyProducts,
+  getProductById,
+  getSellerById,
+  isUserBlacklisted,
+} from '../services/marketplaceService'
 import {
   deleteConversationIfEmpty,
   ensureDirectConversation,
@@ -236,6 +241,31 @@ async function handleProductChatIntent() {
       seller = await getSellerById(sellerId)
     } catch {
       seller = null
+    }
+
+    if (productId) {
+      if (!product) {
+        throw new Error('Este anúncio não está mais disponível para iniciar conversa.')
+      }
+
+      if (String(product.sellerId || '') !== sellerId) {
+        throw new Error('O anúncio informado não pertence ao vendedor selecionado.')
+      }
+
+      const moderationStatus = String(product.moderationStatus || '').trim().toLowerCase()
+
+      if (moderationStatus !== 'approved') {
+        throw new Error('Só é possível iniciar conversa por anúncios aprovados.')
+      }
+    }
+
+    const sellerBlacklisted = await isUserBlacklisted({
+      uid: sellerId,
+      email: String(seller?.email || '').trim().toLowerCase(),
+    })
+
+    if (sellerBlacklisted) {
+      throw new Error('Não é possível iniciar conversa com este vendedor no momento.')
     }
 
     const sellerPayload = {

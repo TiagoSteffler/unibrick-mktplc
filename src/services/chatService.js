@@ -366,7 +366,7 @@ export async function ensureUniBrikConversation(user) {
   }
 
   const conversationId = getSystemConversationId(user.uid)
-  const messageText = 'UniBrik: Suas atualizações de anúncios aparecerão por aqui.'
+  const messageText = 'Canal de avisos da UniBrik.'
 
   const baseConversation = normalizeConversation({
     id: conversationId,
@@ -384,18 +384,9 @@ export async function ensureUniBrikConversation(user) {
     updatedAt: nowIso(),
     lastMessagePreview: messageText,
     unreadCounts: {
-      [user.uid]: 1,
+      [user.uid]: 0,
       [UNI_BRIK_ID]: 0,
     },
-  })
-
-  const systemMessage = normalizeMessage({
-    id: `system-${Date.now()}`,
-    conversationId,
-    senderId: UNI_BRIK_ID,
-    senderName: UNI_BRIK_NAME,
-    text: messageText,
-    createdAt: nowIso(),
   })
 
   if (isFirebaseConfigured && db) {
@@ -404,13 +395,6 @@ export async function ensureUniBrikConversation(user) {
 
     if (!snapshot.exists()) {
       await setDoc(reference, baseConversation)
-      await addDoc(collection(db, CONVERSATIONS_COLLECTION, conversationId, 'messages'), {
-        senderId: UNI_BRIK_ID,
-        senderName: UNI_BRIK_NAME,
-        text: messageText,
-        createdAt: systemMessage.createdAt,
-        attachment: null,
-      })
       return baseConversation
     }
 
@@ -426,10 +410,6 @@ export async function ensureUniBrikConversation(user) {
   if (!existing) {
     conversations.push(baseConversation)
     saveConversationsLocal(conversations)
-
-    const messagesMap = readMessagesLocal()
-    messagesMap[conversationId] = [systemMessage]
-    saveMessagesLocal(messagesMap)
 
     return baseConversation
   }
