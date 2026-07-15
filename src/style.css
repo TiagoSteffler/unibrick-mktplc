@@ -672,10 +672,11 @@ select {
 .product-details-list {
   display: grid;
   gap: 8px;
+  margin-bottom: 16px;
 }
 
 .product-details-list p {
-  margin: 0;
+  margin: 0px;
 }
 
 .product-description {

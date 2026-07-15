@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authState, isAdminSession } from '../services/authService'
-import { getProductById, isFavorite, reportProduct, toggleFavorite } from '../services/marketplaceService'
+import { approveProductByAdmin, getProductById, isFavorite, rejectProductByAdmin, reportProduct, toggleFavorite, deleteProduct } from '../services/marketplaceService'
 
 const route = useRoute()
 const router = useRouter()
@@ -131,6 +131,16 @@ const rejectedOwnProductReason = computed(() => {
   const reason = String(product.value.moderationReason || product.value.reportReason || '').trim()
   return reason || 'Não informado'
 })
+
+const isAdminViewingReportedProduct = computed(() => {
+  if (!isAdminSession.value || !product.value) {
+    return false
+  }
+
+  return product.value.moderationStatus === 'reported'
+})
+
+const adminActionInProgress = ref(false)
 
 async function loadProduct() {
   isLoading.value = true
@@ -351,6 +361,66 @@ function openSellerChat() {
   })
 }
 
+async function approveReportedProduct() {
+  if (!product.value || !user.value || adminActionInProgress.value) {
+    return
+  }
+
+  adminActionInProgress.value = true
+
+  try {
+    await approveProductByAdmin(product.value.id, user.value)
+    await loadProduct()
+  } catch (err) {
+    reportErrorMessage.value = err instanceof Error ? err.message : 'Falha ao aprovar anúncio.'
+  } finally {
+    adminActionInProgress.value = false
+  }
+}
+
+async function rejectReportedProduct() {
+  if (!product.value || !user.value || adminActionInProgress.value) {
+    return
+  }
+
+  const reason = window.prompt('Motivo para invalidar este anúncio:', '')
+
+  if (reason === null) {
+    return
+  }
+
+  adminActionInProgress.value = true
+
+  try {
+    await rejectProductByAdmin(product.value.id, user.value, reason)
+    await loadProduct()
+  } catch (err) {
+    reportErrorMessage.value = err instanceof Error ? err.message : 'Falha ao invalidar anúncio.'
+  } finally {
+    adminActionInProgress.value = false
+  }
+}
+
+async function deleteReportedProduct() {
+  if (!product.value || !user.value || adminActionInProgress.value) {
+    return
+  }
+
+  if (!window.confirm('Tem certeza que deseja excluir este anúncio? Esta ação não pode ser desfeita.')) {
+    return
+  }
+
+  adminActionInProgress.value = true
+
+  try {
+    await deleteProduct(product.value.id, user.value)
+    router.push({ name: 'home' })
+  } catch (err) {
+    reportErrorMessage.value = err instanceof Error ? err.message : 'Falha ao excluir anúncio.'
+    adminActionInProgress.value = false
+  }
+}
+
 onMounted(() => {
   loadProduct()
 })
@@ -479,13 +549,86 @@ watch(
         <p v-if="deliveryMethods.length"><strong>{{ deliveryMethods.join(' | ') }}</strong> </p>
       </div>
 
-      <div class="product-bottom-actions">
+      <div v-if="!isOwnProduct && !product.isAdminPost" class="product-seller-card">
+        <div class="seller-header">
+          <img
+            v-if="product.sellerPhotoURL"
+            :src="product.sellerPhotoURL"
+            :alt="product.sellerName"
+            class="seller-photo"
+          />
+          <div v-else class="seller-photo-placeholder">👤</div>
+          <div class="seller-info">
+            <p class="seller-label">Vendido por:</p>
+            <p class="seller-name">{{ product.sellerName }}</p>
+          </div>
+        </div>
+        <div class="seller-actions">
+          <button class="btn secondary full-width" type="button" @click="openSellerChat">
+            Falar com Vendedor
+          </button>
+          <RouterLink class="btn full-width" :to="`/seller/${product.sellerId}`">
+            Ver perfil
+          </RouterLink>
+        </div>
+      </div>
+
+      <div v-else-if="!isOwnProduct && product.isAdminPost" class="product-seller-card admin-post">
+        <div class="seller-header">
+          <img
+            v-if="product.sellerPhotoURL"
+            :src="product.sellerPhotoURL"
+            :alt="product.sellerName"
+            class="seller-photo"
+          />
+          <div v-else class="seller-photo-placeholder">👤</div>
+          <div class="seller-info">
+            <p class="seller-label">Publicado por:</p>
+            <p class="seller-name">{{ product.sellerName }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="product-bottom-actions">
         <button class="btn secondary" type="button" @click="openSellerChat">
-          {{ isOwnProduct ? 'Minhas conversas' : 'Falar com Vendedor' }}
+          Minhas conversas
         </button>
-        <RouterLink class="btn" :to="isOwnProduct ? `/product/${product.id}/edit` : `/seller/${product.sellerId}`">
-          {{ isOwnProduct ? 'Editar anúncio' : 'Ver vendedor' }}
+        <RouterLink class="btn" :to="`/product/${product.id}/edit`">
+          Editar anúncio
         </RouterLink>
+      </div>
+
+      <div v-if="isAdminViewingReportedProduct" class="admin-moderation-panel">
+        <div class="admin-moderation-header">
+          <h3>Painel de Moderação</h3>
+          <p class="muted">Motivo do reporte: {{ product.reportReason || 'Não informado' }}</p>
+        </div>
+        <div class="admin-moderation-actions">
+          <button
+            class="btn"
+            type="button"
+            :disabled="adminActionInProgress"
+            @click="approveReportedProduct"
+          >
+            {{ adminActionInProgress ? 'Processando...' : 'Aprovar' }}
+          </button>
+          <button
+            class="btn secondary"
+            type="button"
+            :disabled="adminActionInProgress"
+            @click="rejectReportedProduct"
+          >
+            Invalidar
+          </button>
+          <button
+            class="btn danger"
+            type="button"
+            :disabled="adminActionInProgress"
+            @click="deleteReportedProduct"
+          >
+            Excluir
+          </button>
+        </div>
       </div>
 
     </article>
@@ -786,5 +929,110 @@ watch(
 
 .report-modal-card.warning {
   border-top-color: #d97706;
+}
+
+.product-seller-card {
+  border: 1px solid #dbe4ee;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.seller-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.seller-photo {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #e5e7eb;
+  border: 2px solid #e2e8f0;
+}
+
+.seller-photo-placeholder {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #e0e7ff;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  flex-shrink: 0;
+  border: 2px solid #c7d2fe;
+}
+
+.seller-info {
+  display: grid;
+  gap: 2px;
+}
+
+.seller-label {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.seller-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.seller-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.product-seller-card.admin-post {
+  background: #fef3c7;
+  border-color: #fcd34d;
+}
+
+.admin-moderation-panel {
+  border: 2px solid #dc2626;
+  border-radius: 12px;
+  background: #fef2f2;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.admin-moderation-header {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-moderation-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #991b1b;
+}
+
+.admin-moderation-header p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.admin-moderation-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
 }
 </style>

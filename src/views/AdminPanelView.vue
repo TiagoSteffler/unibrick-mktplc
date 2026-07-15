@@ -265,12 +265,8 @@ onMounted(() => {
 
       <label class="field">
         <span>Mensagem</span>
-        <textarea
-          v-model="announcementForm.message"
-          rows="5"
-          maxlength="1500"
-          placeholder="Mensagem exibida no topo da página inicial"
-        ></textarea>
+        <textarea v-model="announcementForm.message" rows="5" maxlength="1500"
+          placeholder="Mensagem exibida no topo da página inicial"></textarea>
       </label>
 
       <div class="action-row">
@@ -298,12 +294,16 @@ onMounted(() => {
               <h3>{{ product.title }}</h3>
               <RouterLink class="btn secondary" :to="`/product/${product.id}`">Abrir</RouterLink>
             </div>
-            <p class="muted">{{ formatPrice(product.price) }} | {{ product.category }} | {{ getModerationStatusLabel(product) }}</p>
+            <p class="muted">{{ formatPrice(product.price) }} | {{ product.category }} | {{
+              getModerationStatusLabel(product) }}</p>
             <p class="muted">Vendedor: {{ product.sellerName }}</p>
             <div class="action-row">
-              <button class="btn" type="button" :disabled="isActing" @click="approveProduct(product.id)">Aprovar</button>
-              <button class="btn secondary" type="button" :disabled="isActing" @click="rejectProduct(product.id)">Marcar inválido</button>
-              <button class="btn danger" type="button" :disabled="isActing" @click="deleteListing(product.id)">Excluir</button>
+              <button class="btn" type="button" :disabled="isActing"
+                @click="approveProduct(product.id)">Aprovar</button>
+              <button class="btn secondary" type="button" :disabled="isActing" @click="rejectProduct(product.id)">Marcar
+                inválido</button>
+              <button class="btn danger" type="button" :disabled="isActing"
+                @click="deleteListing(product.id)">Excluir</button>
             </div>
           </article>
         </div>
@@ -318,20 +318,34 @@ onMounted(() => {
         <div v-else-if="!reportedProducts.length" class="muted">Não há anúncios reportados.</div>
 
         <div v-else class="grid" style="gap: 12px">
-          <article v-for="product in reportedProducts" :key="`reported-${product.id}`" class="admin-item">
-            <div class="admin-item-head">
-              <h3>{{ product.title }}</h3>
-              <RouterLink class="btn secondary" :to="`/product/${product.id}`">Abrir</RouterLink>
+          <article v-for="product in reportedProducts" :key="`reported-${product.id}`"
+            class="admin-item admin-item-reported">
+            <div class="admin-item-content">
+              <div class="admin-item-title">
+                <h3>{{ product.title }}</h3>
+              </div>
             </div>
-            <p class="muted">{{ formatPrice(product.price) }} | {{ product.category }} | {{ getModerationStatusLabel(product) }}</p>
-            <p class="muted">Motivo do reporte: {{ product.reportReason || 'Não informado' }}</p>
-            <p class="muted">Reportado em: {{ formatDate(product.reportedAt) }}</p>
-            <div class="action-row">
-              <button class="btn" type="button" :disabled="isActing" @click="approveProduct(product.id)">Aprovar</button>
-              <button class="btn secondary" type="button" :disabled="isActing" @click="rejectProduct(product.id)">Marcar inválido</button>
-              <button class="btn danger" type="button" :disabled="isActing" @click="deleteListing(product.id)">Excluir</button>
+            <div style="justify-content: flex-end; display: flex; align-items: center;">
+              <RouterLink class="btn secondary btn-small" :to="`/product/${product.id}`">Abrir</RouterLink>
+            </div>
+            <div>
+              <div class="admin-item-content">
+                <p class="muted" style="margin: 0px 0px 6px">{{ formatPrice(product.price) }} | {{ product.category }}
+                </p>
+                <p class="muted" style="margin: 0px 0px 6px">Motivo: {{ product.reportReason || 'Não informado' }}</p>
+                <p class="muted" style="margin: 0px 0px 6px">{{ formatDate(product.reportedAt) }}</p>
+              </div>
+            </div>
+            <div style="gap:6px; display: flex; flex-direction: row; height: 100%; align-items: center;">
+              <button class="btn btn-small" type="button" :disabled="isActing"
+                @click="approveProduct(product.id)">Aprovar</button>
+              <button class="btn secondary btn-small" type="button" :disabled="isActing"
+                @click="rejectProduct(product.id)">Invalidar</button>
+              <button class="btn danger btn-small" type="button" :disabled="isActing"
+                @click="deleteListing(product.id)">Excluir</button>
             </div>
           </article>
+
         </div>
       </article>
     </section>
@@ -345,49 +359,52 @@ onMounted(() => {
       <div v-else-if="!users.length" class="muted">Nenhum usuário encontrado.</div>
 
       <div v-else class="grid" style="gap: 10px">
-        <article v-for="person in users" :key="`user-${person.uid}`" class="admin-item user-item">
-          <div class="user-head">
-            <h3>{{ person.name }}</h3>
-            <div class="user-badges">
-              <span v-if="person.isAdmin" class="badge admin">Admin</span>
-              <span v-if="person.isBlacklisted" class="badge danger">Blacklisted</span>
+        <article v-for="person in users" :key="`user-${person.uid}`" class="admin-item user-item admin-item-reported">
+          <div class="admin-item-content">
+            <div class="user-head admin-item-title">
+              <h3 style="width: fit-content + 20px;">{{ person.name }}</h3>
+              <div class="user-badges">
+                <span v-if="person.isAdmin" class="badge admin">Admin</span>
+                <span v-if="person.isBlacklisted" class="badge danger">Blacklisted</span>
+              </div>
             </div>
           </div>
 
-          <p class="muted">UID: {{ person.uid || 'Não informado' }}</p>
-          <p class="muted">Email: {{ person.email || 'Não informado' }}</p>
-          <p class="muted">Cidade: {{ person.city || 'Não informado' }}</p>
-          <p class="muted">Anúncios: {{ person.productCount }}</p>
-          <p v-if="person.blacklistReason" class="muted">Motivo blacklist: {{ person.blacklistReason }}</p>
+          <div style="justify-content: flex-end; display: flex; align-items: center;">
+            <RouterLink class="btn secondary btn-small" :to="`/seller/${person.uid}`">Abrir</RouterLink>
+          </div>
 
-          <div class="action-row">
-            <button
-              v-if="!person.isAdmin && !person.isBlacklisted"
-              class="btn danger"
-              type="button"
-              :disabled="isActing"
-              @click="banUser(person)"
-            >
+          <div>
+            <div
+              style="display: grid; grid-template-columns: 50% 50%; grid-template-rows: auto auto; gap: 6px; align-items: top; margin-bottom: 10px;">
+              <div>
+                <p class="muted" style="margin: 0 0 6px">UID: {{ person.uid || 'Não informado' }}</p>
+              </div>
+              <div>
+                <p class="muted" style="margin: 0 0 6px">Email: {{ person.email || 'Não informado' }}</p>
+              </div>
+            <div><p class="muted" style="margin: 0 0 6px">Cidade: {{ person.city || 'Não informado' }}</p></div>
+            <div><p class="muted" style="margin: 0 0 6px">Anúncios: {{ person.productCount }}</p></div>
+            </div>
+            
+            <p v-if="person.blacklistReason" class="muted" style="margin: 0 0 6px"><strong>Motivo blacklist: {{
+              person.blacklistReason }}</strong></p>
+          </div>
+
+          <div
+            style="gap:6px; display: flex; flex-direction: row; height: 100%; align-items: center; justify-content: flex-end;">
+            <button v-if="!person.isAdmin && !person.isBlacklisted" class="btn danger btn-small" type="button"
+              :disabled="isActing" @click="banUser(person)">
               Banir
             </button>
 
-            <button
-              v-if="person.isBlacklisted"
-              class="btn secondary"
-              type="button"
-              :disabled="isActing"
-              @click="unbanUser(person)"
-            >
+            <button v-if="person.isBlacklisted" class="btn secondary btn-small" type="button" :disabled="isActing"
+              @click="unbanUser(person)">
               Remover ban
             </button>
 
-            <button
-              v-if="!person.isAdmin"
-              class="btn secondary"
-              type="button"
-              :disabled="isActing"
-              @click="deleteUserData(person)"
-            >
+            <button v-if="!person.isAdmin" class="btn secondary btn-small" type="button" :disabled="isActing"
+              @click="deleteUserData(person)">
               Excluir dados
             </button>
           </div>
@@ -437,9 +454,8 @@ h3 {
 }
 
 .user-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  align-items: left;
   gap: 8px;
 }
 
@@ -480,5 +496,41 @@ h3 {
   .two-columns {
     grid-template-columns: 1fr;
   }
+}
+
+.admin-item-reported {
+  display: grid;
+  grid-template-columns: auto max(220px, 25%);
+  grid-template-rows: 50px auto;
+  gap: 12px;
+  align-items: top;
+}
+
+.admin-item-content {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-item-title {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.admin-item-title h3 {
+  margin: 0;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.admin-item-actions {
+  display: grid;
+  grid-template-rows: repeat(3, 1fr);
+  gap: 8px;
+  min-width: fit-content;
 }
 </style>

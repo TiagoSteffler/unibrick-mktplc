@@ -22,6 +22,7 @@ import {
   isFirebaseConfigured,
   storage,
 } from '../firebase/config'
+import { markProductConversationsAsDeleted } from './chatService'
 
 const EXTRA_PRODUCTS_KEY = 'marketplace_extra_products'
 const USER_PROFILE_KEY = 'marketplace_user_profiles'
@@ -562,10 +563,13 @@ export async function resolveUserAccess(user, options = {}) {
 
   const localAdminEmails = readLocalAdminEmails()
   const canBeAdmin = isAdminDomainEmail(normalizedUser.email)
+  const canTrustLocalAdminList = !isFirebaseConfigured || !db
   let isAdmin = false
 
   if (canBeAdmin) {
-    isAdmin = localAdminEmails.includes(normalizedUser.email)
+    // Com Firebase ativo, o backend (Rules) nao confia em lista local/env.
+    // Evita sessao "admin" no frontend que falha com 403 no Storage.
+    isAdmin = canTrustLocalAdminList && localAdminEmails.includes(normalizedUser.email)
 
     if (!isAdmin) {
       isAdmin = await hasAdminDocumentInFirestore(normalizedUser)
@@ -2003,6 +2007,7 @@ export async function deleteProduct(productId, user) {
     await deleteDoc(reference)
     await deletePhotosFromStorage(storagePhotos)
     removeProductFromAllFavorites(String(productId))
+    await markProductConversationsAsDeleted(productId)
 
     // Invalidar cache do produto deletado
     invalidateProductCache(productId)
@@ -2026,6 +2031,7 @@ export async function deleteProduct(productId, user) {
   extra.splice(index, 1)
   safeWrite(EXTRA_PRODUCTS_KEY, extra)
   removeProductFromAllFavorites(productId)
+  await markProductConversationsAsDeleted(productId)
 }
 
 export async function getMyProfile(user) {

@@ -10,11 +10,57 @@ function normalizeStorageBucket(value) {
     return ''
   }
 
-  return raw
-    .replace(/^gs:\/\//i, '')
-    .replace(/^https?:\/\//i, '')
-    .split('/')[0]
-    .trim()
+  const withoutGsProtocol = raw.replace(/^gs:\/\//i, '').trim()
+
+  // Aceita URLs comuns do Firebase Storage e extrai apenas o bucket real.
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const parsedUrl = new URL(raw)
+      const host = String(parsedUrl.hostname || '').trim().toLowerCase()
+      const pathParts = String(parsedUrl.pathname || '')
+        .split('/')
+        .filter(Boolean)
+
+      if (host === 'firebasestorage.googleapis.com') {
+        const bucketMarkerIndex = pathParts.indexOf('b')
+
+        if (bucketMarkerIndex >= 0 && pathParts[bucketMarkerIndex + 1]) {
+          return pathParts[bucketMarkerIndex + 1].trim()
+        }
+      }
+
+      if (host === 'storage.googleapis.com' && pathParts[0]) {
+        return pathParts[0].trim()
+      }
+
+      if (host.endsWith('.appspot.com') || host.endsWith('.firebasestorage.app')) {
+        return host
+      }
+    } catch {
+      // Fallback para parsing textual abaixo.
+    }
+  }
+
+  const normalized = withoutGsProtocol.replace(/^https?:\/\//i, '')
+  const parts = normalized.split('/').filter(Boolean)
+
+  if (!parts.length) {
+    return ''
+  }
+
+  if (parts[0] === 'firebasestorage.googleapis.com') {
+    const bucketMarkerIndex = parts.indexOf('b')
+
+    if (bucketMarkerIndex >= 0 && parts[bucketMarkerIndex + 1]) {
+      return parts[bucketMarkerIndex + 1].trim()
+    }
+  }
+
+  if (parts[0] === 'storage.googleapis.com' && parts[1]) {
+    return parts[1].trim()
+  }
+
+  return parts[0].trim()
 }
 
 const firebaseProjectId = String(import.meta.env.VITE_FIREBASE_PROJECT_ID || '').trim()

@@ -9,6 +9,7 @@ import {
   isUserBlacklisted,
 } from '../services/marketplaceService'
 import {
+  buildDirectConversationDraft,
   deleteConversationIfEmpty,
   ensureDirectConversation,
   ensureUniBrikConversation,
@@ -41,8 +42,8 @@ const activeConversation = computed(
   () => conversations.value.find((conversation) => conversation.id === activeConversationId.value) || null,
 )
 const activePeer = computed(() => getConversationPeer(activeConversation.value, user.value?.uid || ''))
-const isReadOnlyConversation = computed(() => Boolean(activeConversation.value?.readOnly))
 const activeTopicProduct = computed(() => activeConversation.value?.topicProduct || null)
+const isReadOnlyConversation = computed(() => Boolean(activeConversation.value?.readOnly) || Boolean(activeTopicProduct.value?.deleted))
 
 const hasBuyerFirstMessage = computed(() => {
   const buyerId = activeTopicProduct.value?.buyerId
@@ -284,7 +285,7 @@ async function handleProductChatIntent() {
 
     const conversation = shouldPatchTopicOnExisting
       ? await ensureDirectConversation(user.value, sellerPayload, { topicProduct })
-      : existing || (await ensureDirectConversation(user.value, sellerPayload, { topicProduct }))
+      : existing || buildDirectConversationDraft(user.value, sellerPayload, { topicProduct })
 
     const alreadyInList = conversations.value.some((item) => item.id === conversation.id)
 
@@ -428,7 +429,11 @@ watch(
           <button
             type="button"
             class="chat-conversation-item"
-            :class="{ active: conversation.id === activeConversationId }"
+            :class="{ 
+              active: conversation.id === activeConversationId,
+              deleted: conversation.topicProduct?.deleted === true
+            }"
+            :disabled="conversation.topicProduct?.deleted === true"
             @click="selectConversation(conversation.id)"
           >
             <div class="chat-conversation-head">
@@ -445,11 +450,23 @@ watch(
 
     <section class="card chat-main" v-if="hasConversations && activeConversation">
       <header class="chat-main-header">
-        <h2>{{ activePeer?.name || 'Conversa' }}</h2>
-        <p v-if="isReadOnlyConversation" class="muted">Conversa somente leitura.</p>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; width: 100%;">
+          <div>
+            <h2>{{ activeTopicProduct ? activeTopicProduct.title : (activePeer?.name || 'Conversa') }}</h2>
+            <p v-if="activeTopicProduct" class="muted">Vendedor: {{ activePeer?.name }}</p>
+            <p v-if="isReadOnlyConversation" class="muted">Conversa somente leitura.</p>
+          </div>
+          <RouterLink v-if="activeTopicProduct && !activeTopicProduct.deleted" :to="`/product/${activeTopicProduct.productId}`" class="btn btn-sm">
+            Ir ao anúncio
+          </RouterLink>
+        </div>
       </header>
 
-      <div v-if="showTopicPreviewBanner" class="chat-topic-banner">
+      <div v-if="activeTopicProduct?.deleted === true" class="chat-topic-banner chat-error-banner" style="background-color: #fee2e2; border-color: #fca5a5;">
+        <strong style="color: #991b1b;">Este chat foi finalizado pois o anúncio foi removido.</strong>
+      </div>
+
+      <div v-else-if="showTopicPreviewBanner" class="chat-topic-banner">
         <strong>Você está pedindo sobre:</strong>
         <span>{{ activeTopicProduct?.title }}</span>
       </div>
@@ -586,6 +603,12 @@ watch(
 .chat-conversation-item.active {
   border-color: #60a5fa;
   background: #eff6ff;
+}
+
+.chat-conversation-item.deleted {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(1);
 }
 
 .chat-main {

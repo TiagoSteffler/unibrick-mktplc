@@ -313,12 +313,13 @@ export async function ensureDirectConversation(currentUser, otherUser, options =
   return baseConversation
 }
 
-export function buildDirectConversationDraft(currentUser, otherUser) {
+export function buildDirectConversationDraft(currentUser, otherUser, options = {}) {
   if (!currentUser || !otherUser?.id) {
     throw new Error('Dados de conversa inválidos.')
   }
 
-  return createDirectConversationBase(currentUser, otherUser)
+  const topicProduct = normalizeTopicProduct(options.topicProduct)
+  return createDirectConversationBase(currentUser, otherUser, nowIso(), topicProduct)
 }
 
 export async function deleteConversationIfEmpty(conversationId) {
@@ -643,4 +644,42 @@ export async function deleteUserChatData(user) {
   })
 
   saveMessagesLocal(messagesMap)
+}
+
+export async function markProductConversationsAsDeleted(productId) {
+  if (!productId) return
+
+  if (isFirebaseConfigured && db) {
+    try {
+      const q = query(collection(db, CONVERSATIONS_COLLECTION), where('topicProduct.productId', '==', String(productId)))
+      const snapshot = await getDocs(q)
+      const updates = snapshot.docs.map(docSnap => 
+        setDoc(docSnap.ref, { topicProduct: { deleted: true } }, { merge: true })
+      )
+      await Promise.all(updates)
+    } catch (e) {
+      console.warn('Falha ao atualizar conversas do produto apagado', e)
+    }
+    return
+  }
+
+  const conversations = readConversationsLocal()
+  let changed = false
+  const updated = conversations.map(conv => {
+    if (conv.topicProduct && conv.topicProduct.productId === String(productId)) {
+      changed = true
+      return {
+        ...conv,
+        topicProduct: {
+          ...conv.topicProduct,
+          deleted: true
+        }
+      }
+    }
+    return conv
+  })
+
+  if (changed) {
+    saveConversationsLocal(updated)
+  }
 }
