@@ -194,7 +194,7 @@ async function loadMessages() {
 
   return new Promise((resolve) => {
     let isFirst = true
-    unsubscribeMessages.value = listenToConversationMessages(activeConversationId.value, async (data) => {
+    unsubscribeMessages.value = listenToConversationMessages(activeConversation.value, async (data) => {
       messages.value = data
       isLoadingMessages.value = false
       checkAttachments(data)
@@ -226,27 +226,15 @@ async function loadMessages() {
   })
 }
 
-async function ensureSystemConversationIfVendor() {
+async function ensureSystemConversation() {
   if (!user.value) {
-    return
-  }
-
-  let myProducts = []
-
-  try {
-    myProducts = await getMyProducts(user.value)
-  } catch {
-    return
-  }
-
-  if (!myProducts.length) {
     return
   }
 
   try {
     await ensureUniBrikConversation(user.value)
   } catch {
-    // Falha no sistema de avisos não pode bloquear a abertura das conversas diretas.
+    // Falha silenciosa
   }
 }
 
@@ -439,7 +427,7 @@ async function initializeChat() {
 
   chatError.value = ''
 
-  await ensureSystemConversationIfVendor()
+  await ensureSystemConversation()
   await loadConversations()
 
   await handleProductChatIntent()
@@ -536,11 +524,6 @@ watch(
 
       <div v-if="activeTopicProduct?.deleted === true" class="chat-topic-banner chat-error-banner" style="background-color: #fee2e2; border-color: #fca5a5;">
         <strong style="color: #991b1b;">Este chat foi finalizado pois o anúncio foi removido.</strong>
-      </div>
-
-      <div v-else-if="showTopicPreviewBanner" class="chat-topic-banner">
-        <strong>Você está pedindo sobre:</strong>
-        <span>{{ activeTopicProduct?.title }}</span>
       </div>
 
       <section class="chat-messages loading-section" ref="messagesContainer">
@@ -641,7 +624,7 @@ watch(
 }
 
 .chat-sidebar {
-  min-height: 420px;
+  min-height: 80vh;
 }
 
 .chat-sidebar h1 {
@@ -707,7 +690,7 @@ watch(
 }
 
 .chat-main {
-  min-height: 520px;
+  height: 80vh;
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: 12px;
@@ -740,7 +723,7 @@ watch(
 .chat-messages {
   position: relative;
   min-height: 280px;
-  max-height: 52vh;
+  max-height: 60vh;
   overflow: auto;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -795,26 +778,29 @@ watch(
 }
 
 .chat-attachment {
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
+  border: 1px solid #dbe4ee;
+  border-radius: 8px;
   padding: 8px;
-  background: #fff;
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  gap: 8px;
+  background: #f8fafc;
+  display: flex;
+  gap: 12px;
   align-items: center;
+  text-decoration: none;
+  color: inherit;
+  max-width: 100%;
 }
 
 .chat-attachment img {
-  width: 64px;
-  height: 64px;
+  width: 50px;
+  height: 50px;
   object-fit: cover;
-  border-radius: 8px;
-  background: #e5e7eb;
+  border-radius: 6px;
+  background: #e2e8f0;
 }
 
 .chat-attachment div {
-  display: grid;
+  display: flex;
+  flex-direction: column;
 }
 
 .chat-composer {
