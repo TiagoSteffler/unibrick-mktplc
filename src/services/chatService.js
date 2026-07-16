@@ -8,6 +8,7 @@ import {
   where,
   addDoc,
   deleteDoc,
+  onSnapshot,
 } from 'firebase/firestore'
 import { db, isFirebaseConfigured } from '../firebase/config'
 
@@ -26,14 +27,13 @@ function safeRead(key, fallback) {
 
   try {
     return JSON.parse(raw)
-  } catch {
-    localStorage.removeItem(key)
+  } catch (err) {
     return fallback
   }
 }
 
-function safeWrite(key, data) {
-  localStorage.setItem(key, JSON.stringify(data))
+function safeWrite(key, value) {
+  localStorage.setItem(key, JSON.stringify(value))
 }
 
 function nowIso() {
@@ -255,6 +255,112 @@ export async function getConversationMessages(conversationId) {
   return messages.map(normalizeMessage).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 }
 
+export function listenToUserConversations(user, callback) {
+  if (!user) {
+    callback([])
+    return () => {}
+  }
+
+  if (isFirebaseConfigured && db) {
+    const q = query(collection(db, CONVERSATIONS_COLLECTION), where('participants', 'array-contains', user.uid))
+    return onSnapshot(q, (snapshot) => {
+      const convs = snapshot.docs.map((item) =>
+        normalizeConversation({
+          id: item.id,
+          ...item.data(),
+        })
+      )
+      callback(sortByUpdatedAtDesc(convs))
+    }, (err) => {
+      console.error(err)
+      callback([])
+    })
+  }
+
+  const conversations = readConversationsLocal().filter((item) => item.participants.includes(user.uid))
+  callback(sortByUpdatedAtDesc(conversations))
+  return () => {}
+}
+
+export function listenToConversationMessages(conversation, callback) {
+  if (!conversation?.id) {
+    callback([])
+    return () => {}
+  }
+
+  const conversationId = conversation.id
+  const isSystem = conversation.type === 'system'
+
+  if (isFirebaseConfigured && db) {
+    let personalMessages = []
+    let broadcastMessages = []
+
+    function mergeAndNotify() {
+      const msgs = [...personalMessages, ...broadcastMessages]
+      msgs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      callback(msgs)
+    }
+
+    const q = collection(db, CONVERSATIONS_COLLECTION, conversationId, 'messages')
+    const unsubPersonal = onSnapshot(q, (snapshot) => {
+      personalMessages = snapshot.docs.map((item) =>
+        normalizeMessage({
+          id: item.id,
+          conversationId,
+          ...item.data(),
+        })
+      )
+      mergeAndNotify()
+    }, (err) => {
+      console.error(err)
+      callback([])
+    })
+
+    let unsubBroadcasts = () => {}
+    if (isSystem) {
+      const qBroadcast = collection(db, 'unibrik_broadcasts')
+      unsubBroadcasts = onSnapshot(qBroadcast, (snapshot) => {
+        broadcastMessages = snapshot.docs.map((item) =>
+          normalizeMessage({
+            id: item.id,
+            conversationId,
+            senderId: UNI_BRIK_ID,
+            senderName: UNI_BRIK_NAME,
+            ...item.data(),
+          })
+        )
+        mergeAndNotify()
+      }, (err) => {
+        console.error(err)
+      })
+    }
+
+    return () => {
+      unsubPersonal()
+      unsubBroadcasts()
+    }
+  }
+
+  const messagesMap = readMessagesLocal()
+  const messages = Array.isArray(messagesMap[conversationId]) ? messagesMap[conversationId] : []
+  
+  let broadcastLocal = []
+  if (isSystem) {
+    const rawBroadcasts = safeRead('unibrik_broadcasts_local', [])
+    broadcastLocal = rawBroadcasts.map((item) => normalizeMessage({
+      id: item.id,
+      conversationId,
+      senderId: UNI_BRIK_ID,
+      senderName: UNI_BRIK_NAME,
+      ...item
+    }))
+  }
+
+  const msgs = [...messages, ...broadcastLocal].map(normalizeMessage).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+  callback(msgs)
+  return () => {}
+}
+
 export async function ensureDirectConversation(currentUser, otherUser, options = {}) {
   if (!currentUser || !otherUser?.id) {
     throw new Error('Dados de conversa inválidos.')
@@ -359,6 +465,62 @@ export async function deleteConversationIfEmpty(conversationId) {
   saveMessagesLocal(messagesMap)
 
   return true
+}
+
+export async function sendSystemBroadcast(adminUser, text) {
+  if (!adminUser || !text) return
+
+  const payload = {
+    text,
+    senderId: UNI_BRIK_ID,
+    senderName: UNI_BRIK_NAME,
+    createdAt: nowIso(),
+    kind: 'text',
+  }
+
+  if (isFirebaseConfigured && db) {
+    await addDoc(collection(db, 'unibrik_broadcasts'), payload)
+    return
+  }
+
+  const broadcasts = safeRead('unibrik_broadcasts_local', [])
+  broadcasts.push({ id: `broadcast-${Date.now()}`, ...payload })
+  safeWrite('unibrik_broadcasts_local', broadcasts)
+}
+
+export async function sendSystemMessageToUser(targetUserId, text, topicProduct = null) {
+  if (!targetUserId || !text) return
+  
+  const conversationId = getSystemConversationId(targetUserId)
+  const payload = {
+    text,
+    senderId: UNI_BRIK_ID,
+    senderName: UNI_BRIK_NAME,
+    createdAt: nowIso(),
+    kind: 'text',
+  }
+  if (topicProduct) {
+    payload.attachment = {
+      productId: topicProduct.productId,
+      title: topicProduct.title,
+      price: topicProduct.price,
+      photo: topicProduct.photo,
+    }
+  }
+
+  if (isFirebaseConfigured && db) {
+    await addDoc(collection(db, CONVERSATIONS_COLLECTION, conversationId, 'messages'), payload)
+    await setDoc(doc(db, CONVERSATIONS_COLLECTION, conversationId), {
+      lastMessagePreview: text.substring(0, 50),
+      updatedAt: nowIso()
+    }, { merge: true })
+    return
+  }
+
+  const messagesMap = readMessagesLocal()
+  if (!messagesMap[conversationId]) messagesMap[conversationId] = []
+  messagesMap[conversationId].push({ id: `sys-${Date.now()}`, ...payload })
+  saveMessagesLocal(messagesMap)
 }
 
 export async function ensureUniBrikConversation(user) {

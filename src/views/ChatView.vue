@@ -7,6 +7,7 @@ import {
   getProductById,
   getSellerById,
   isUserBlacklisted,
+  resolveUserAccess,
 } from '../services/marketplaceService'
 import {
   buildDirectConversationDraft,
@@ -16,9 +17,11 @@ import {
   getConversationMessages,
   getConversationPeer,
   getUnreadCountForUser,
-  getUserConversations,
+  listenToUserConversations,
+  listenToConversationMessages,
   markConversationAsRead,
   sendChatMessage,
+  sendSystemBroadcast,
 } from '../services/chatService'
 
 const route = useRoute()
@@ -33,6 +36,23 @@ const pendingAttachment = ref(null)
 const ephemeralConversationId = ref('')
 const chatError = ref('')
 
+const unsubscribeConversations = ref(null)
+const unsubscribeMessages = ref(null)
+const deletedProducts = ref(new Set())
+
+async function checkAttachments(msgs) {
+  const ids = new Set(msgs.filter(m => m.attachment).map(m => m.attachment.productId))
+  ids.forEach(async id => {
+    if (deletedProducts.value.has(id)) return
+    try {
+      const prod = await getProductById(id)
+      if (!prod) deletedProducts.value.add(id)
+    } catch {
+      deletedProducts.value.add(id)
+    }
+  })
+}
+
 const isLoadingConversations = ref(false)
 const isLoadingMessages = ref(false)
 const isSending = ref(false)
@@ -43,7 +63,22 @@ const activeConversation = computed(
 )
 const activePeer = computed(() => getConversationPeer(activeConversation.value, user.value?.uid || ''))
 const activeTopicProduct = computed(() => activeConversation.value?.topicProduct || null)
-const isReadOnlyConversation = computed(() => Boolean(activeConversation.value?.readOnly) || Boolean(activeTopicProduct.value?.deleted))
+
+const isAdmin = ref(false)
+const messagesContainer = ref(null)
+
+function scrollToBottom() {
+  setTimeout(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    }
+  }, 50)
+}
+
+const isReadOnlyConversation = computed(() => {
+  if (activeConversation.value?.type === 'system' && isAdmin.value) return false
+  return Boolean(activeConversation.value?.readOnly) || Boolean(activeTopicProduct.value?.deleted)
+})
 
 const hasBuyerFirstMessage = computed(() => {
   const buyerId = activeTopicProduct.value?.buyerId
@@ -114,6 +149,10 @@ function buildAttachmentFromProduct(product) {
 }
 
 async function loadConversations() {
+  if (unsubscribeConversations.value) {
+    unsubscribeConversations.value()
+  }
+
   if (!user.value) {
     conversations.value = []
     activeConversationId.value = ''
@@ -124,23 +163,27 @@ async function loadConversations() {
   isLoadingConversations.value = true
   chatError.value = ''
 
-  try {
-    conversations.value = await getUserConversations(user.value)
-
-    if (!activeConversationId.value && conversations.value.length) {
-      activeConversationId.value = conversations.value[0].id
-    }
-  } catch (err) {
-    conversations.value = []
-    activeConversationId.value = ''
-    messages.value = []
-    chatError.value = err instanceof Error ? err.message : 'Falha ao carregar conversas.'
-  } finally {
-    isLoadingConversations.value = false
-  }
+  return new Promise((resolve) => {
+    let isFirst = true
+    unsubscribeConversations.value = listenToUserConversations(user.value, (data) => {
+      conversations.value = data
+      if (!activeConversationId.value && conversations.value.length) {
+        activeConversationId.value = conversations.value[0].id
+      }
+      isLoadingConversations.value = false
+      if (isFirst) {
+        isFirst = false
+        resolve()
+      }
+    })
+  })
 }
 
 async function loadMessages() {
+  if (unsubscribeMessages.value) {
+    unsubscribeMessages.value()
+  }
+
   if (!activeConversationId.value) {
     messages.value = []
     return
@@ -149,32 +192,38 @@ async function loadMessages() {
   isLoadingMessages.value = true
   chatError.value = ''
 
-  try {
-    messages.value = await getConversationMessages(activeConversationId.value)
+  return new Promise((resolve) => {
+    let isFirst = true
+    unsubscribeMessages.value = listenToConversationMessages(activeConversationId.value, async (data) => {
+      messages.value = data
+      isLoadingMessages.value = false
+      checkAttachments(data)
+      scrollToBottom()
 
-    if (user.value && activeConversation.value) {
-      await markConversationAsRead(user.value, activeConversation.value)
+      if (user.value && activeConversation.value) {
+        await markConversationAsRead(user.value, activeConversation.value)
 
-      conversations.value = conversations.value.map((conversation) => {
-        if (conversation.id !== activeConversation.value?.id) {
-          return conversation
-        }
+        conversations.value = conversations.value.map((conversation) => {
+          if (conversation.id !== activeConversation.value?.id) {
+            return conversation
+          }
 
-        return {
-          ...conversation,
-          unreadCounts: {
-            ...(conversation.unreadCounts || {}),
-            [user.value.uid]: 0,
-          },
-        }
-      })
-    }
-  } catch (err) {
-    messages.value = []
-    chatError.value = err instanceof Error ? err.message : 'Falha ao carregar mensagens.'
-  } finally {
-    isLoadingMessages.value = false
-  }
+          return {
+            ...conversation,
+            unreadCounts: {
+              ...(conversation.unreadCounts || {}),
+              [user.value.uid]: 0,
+            },
+          }
+        })
+      }
+      
+      if (isFirst) {
+        isFirst = false
+        resolve()
+      }
+    })
+  })
 }
 
 async function ensureSystemConversationIfVendor() {
@@ -319,6 +368,13 @@ function selectConversation(conversationId) {
   })
 }
 
+function handleKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    sendMessage()
+  }
+}
+
 async function sendMessage() {
   if (!activeConversation.value || isSending.value) {
     return
@@ -337,6 +393,15 @@ async function sendMessage() {
     const currentConversation = activeConversation.value
 
     if (!currentConversation) {
+      return
+    }
+
+    if (currentConversation.type === 'system' && isAdmin.value) {
+      await sendSystemBroadcast(user.value, text)
+      draftMessage.value = ''
+      pendingAttachment.value = null
+      scrollToBottom()
+      isSending.value = false
       return
     }
 
@@ -388,11 +453,18 @@ async function initializeChat() {
   await loadMessages()
 }
 
-onMounted(() => {
+onMounted(async () => {
+  if (user.value) {
+    const access = await resolveUserAccess(user.value)
+    isAdmin.value = access.isAdmin
+  }
   initializeChat()
 })
 
 onBeforeUnmount(async () => {
+  if (unsubscribeConversations.value) unsubscribeConversations.value()
+  if (unsubscribeMessages.value) unsubscribeMessages.value()
+
   if (!ephemeralConversationId.value) {
     return
   }
@@ -471,7 +543,7 @@ watch(
         <span>{{ activeTopicProduct?.title }}</span>
       </div>
 
-      <section class="chat-messages loading-section">
+      <section class="chat-messages loading-section" ref="messagesContainer">
         <div v-if="isLoadingMessages" class="section-loading-overlay" aria-live="polite">
           <span class="spinner" aria-hidden="true"></span>
           <p>Carregando mensagens...</p>
@@ -495,23 +567,34 @@ watch(
           <template v-else>
             <p v-if="message.text" class="chat-message-text">{{ message.text }}</p>
 
-            <RouterLink
-              v-if="message.attachment"
-              :to="`/product/${message.attachment.productId}`"
-              class="chat-attachment"
-            >
-              <img
-                v-if="message.attachment.photo"
-                :src="message.attachment.photo"
-                :alt="message.attachment.title"
-              />
-              <div>
-                <strong>{{ message.attachment.title }}</strong>
-                <small class="muted">
-                  R$ {{ Number(message.attachment.price || 0).toFixed(2) }}
-                </small>
+            <div v-if="message.attachment" class="chat-attachment-wrapper">
+              <RouterLink
+                v-if="!deletedProducts.has(message.attachment.productId)"
+                :to="`/product/${message.attachment.productId}`"
+                class="chat-attachment"
+              >
+                <img
+                  v-if="message.attachment.photo"
+                  :src="message.attachment.photo"
+                  :alt="message.attachment.title"
+                />
+                <div>
+                  <strong>{{ message.attachment.title }}</strong>
+                  <small class="muted">
+                    R$ {{ Number(message.attachment.price || 0).toFixed(2) }}
+                  </small>
+                </div>
+              </RouterLink>
+              <div v-else class="chat-attachment chat-attachment-deleted" style="opacity: 0.6; cursor: not-allowed; filter: grayscale(1);">
+                <div class="chat-attachment-icon" style="font-size: 24px; display: grid; place-items: center; width: 64px; height: 64px; background: #f1f5f9; border-radius: 8px;">🚫</div>
+                <div>
+                  <strong style="color: #64748b;">Anúncio indisponível</strong>
+                  <small class="muted">
+                    R$ {{ Number(message.attachment.price || 0).toFixed(2) }}
+                  </small>
+                </div>
               </div>
-            </RouterLink>
+            </div>
 
             <small class="chat-message-time">{{ formatTimestamp(message.createdAt) }}</small>
           </template>
@@ -530,9 +613,14 @@ watch(
             rows="2"
             placeholder="Digite sua mensagem"
             :disabled="isReadOnlyConversation || isSending"
+            @keydown="handleKeydown"
           ></textarea>
-          <button class="btn" type="submit" :disabled="isReadOnlyConversation || isSending">
-            {{ isSending ? 'Enviando...' : 'Enviar' }}
+          <button class="btn btn-icon" type="submit" :disabled="isReadOnlyConversation || isSending || (!draftMessage.trim() && !pendingAttachment)" title="Enviar" style="height: 52px; width: 52px; padding: 0; display: flex; align-items: center; justify-content: center;">
+            <svg v-if="!isSending" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+            <span v-else class="spinner" style="width: 20px; height: 20px; border-width: 2px;"></span>
           </button>
         </form>
       </footer>
@@ -578,6 +666,13 @@ watch(
   display: grid;
   gap: 4px;
   cursor: pointer;
+}
+
+.chat-conversation-item small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
 }
 
 .chat-conversation-head {
@@ -658,6 +753,8 @@ watch(
 
 .chat-message {
   max-width: min(82%, 520px);
+  width: fit-content;
+  justify-self: start;
   background: #ffffff;
   border: 1px solid #dbe4ee;
   border-radius: 12px;
@@ -668,6 +765,7 @@ watch(
 
 .chat-message.own {
   margin-left: auto;
+  justify-self: end;
   background: #e0f2fe;
   border-color: #93c5fd;
 }

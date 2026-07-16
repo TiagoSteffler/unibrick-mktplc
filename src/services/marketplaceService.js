@@ -20,9 +20,9 @@ import {
   firebaseProjectId,
   firebaseStorageBucket,
   isFirebaseConfigured,
-  storage,
 } from '../firebase/config'
-import { markProductConversationsAsDeleted } from './chatService'
+import { markProductConversationsAsDeleted, sendSystemMessageToUser, ensureUniBrikConversation } from './chatService'
+import { SYSTEM_MESSAGES } from '../config/messages'
 
 const EXTRA_PRODUCTS_KEY = 'marketplace_extra_products'
 const USER_PROFILE_KEY = 'marketplace_user_profiles'
@@ -1903,6 +1903,11 @@ export async function updateProduct(productId, payload, user) {
 
     await deletePhotosFromStorage(removedPhotos)
 
+    if (isAdminActor && !isOwner && nextModerationStatus === 'rejected') {
+      await ensureUniBrikConversation({ uid: current.sellerId })
+      await sendSystemMessageToUser(current.sellerId, SYSTEM_MESSAGES.PRODUCT_INVALIDATED(updated.title), updated)
+    }
+
     // Invalidar cache do produto atualizado
     invalidateProductCache(productId)
 
@@ -1969,6 +1974,11 @@ export async function updateProduct(productId, payload, user) {
   extra[index] = updated
   safeWrite(EXTRA_PRODUCTS_KEY, extra)
 
+  if (isAdminActor && !isOwner && nextModerationStatus === 'rejected') {
+    await ensureUniBrikConversation({ uid: current.sellerId })
+    await sendSystemMessageToUser(current.sellerId, SYSTEM_MESSAGES.PRODUCT_INVALIDATED(updated.title), updated)
+  }
+
   return updated
 }
 
@@ -2009,6 +2019,11 @@ export async function deleteProduct(productId, user) {
     removeProductFromAllFavorites(String(productId))
     await markProductConversationsAsDeleted(productId)
 
+    if (isAdminActor && current.sellerId !== user.uid) {
+      await ensureUniBrikConversation({ uid: current.sellerId })
+      await sendSystemMessageToUser(current.sellerId, SYSTEM_MESSAGES.PRODUCT_DELETED(current.title), current)
+    }
+
     // Invalidar cache do produto deletado
     invalidateProductCache(productId)
 
@@ -2032,6 +2047,11 @@ export async function deleteProduct(productId, user) {
   safeWrite(EXTRA_PRODUCTS_KEY, extra)
   removeProductFromAllFavorites(productId)
   await markProductConversationsAsDeleted(productId)
+
+  if (isAdminActor && current.sellerId !== user.uid) {
+    await ensureUniBrikConversation({ uid: current.sellerId })
+    await sendSystemMessageToUser(current.sellerId, SYSTEM_MESSAGES.PRODUCT_DELETED(current.title), current)
+  }
 }
 
 export async function getMyProfile(user) {
