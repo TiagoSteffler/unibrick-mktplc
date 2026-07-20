@@ -76,5 +76,23 @@ export function invalidateCache(collectionName, docId = null) {
   } else {
     delete cacheState.collections[collectionName]
     sessionStorage.removeItem(`${CACHE_PREFIX}${collectionName}`)
+    sessionStorage.removeItem(`${CACHE_PREFIX}${collectionName}_timestamp`)
+  }
+}
+
+export function getCacheTimestamp(collectionName) {
+  try {
+    const cached = sessionStorage.getItem(`${CACHE_PREFIX}${collectionName}_timestamp`)
+    return cached || null
+  } catch (err) {
+    return null
+  }
+}
+
+export function setCacheTimestamp(collectionName, timestamp) {
+  try {
+    sessionStorage.setItem(`${CACHE_PREFIX}${collectionName}_timestamp`, timestamp)
+  } catch (err) {
+    // Falha silenciosa
   }
 }

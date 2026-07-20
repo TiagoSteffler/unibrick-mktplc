@@ -14,7 +14,7 @@ import {
 import { getIdTokenResult } from 'firebase/auth'
 import { deleteObject, getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage'
 import { db, isFirebaseConfigured, storage } from '../firebase/config'
-import { getCachedCollection, getCachedDoc, setCachedCollection, setCachedDoc, invalidateCache } from './cacheService'
+import { getCachedCollection, getCachedDoc, setCachedCollection, setCachedDoc, invalidateCache, getCacheTimestamp, setCacheTimestamp } from './cacheService'
 import { markProductConversationsAsDeleted, sendSystemMessageToUser, ensureUniBrikConversation } from './chatService'
 import { SYSTEM_MESSAGES } from '../config/messages'
 
@@ -34,6 +34,8 @@ const ADMIN_DOMAIN = 'gmail.com'
 const BLACKLIST_USERS_KEY = 'marketplace_blacklist_users'
 const ADMIN_USERS_KEY = 'marketplace_admin_emails'
 const HOME_MESSAGE_KEY = 'marketplace_home_message'
+const METADATA_COLLECTION = 'system_metadata'
+const CACHE_DOC = 'cache_invalidation'
 
 const configuredAdminEmails = parseAdminEmails(
   `${import.meta.env.VITE_ADMIN_EMAIL || ''},${import.meta.env.VITE_ADMIN_EMAILS || ''}`,
@@ -234,11 +236,12 @@ function setCachedProduct(productId, product) {
   setCachedDoc(PRODUCTS_COLLECTION, productId, product)
 }
 
-function invalidateProductCache(productId) {
+async function invalidateProductCache(productId) {
   if (productId) {
     invalidateCache(PRODUCTS_COLLECTION, productId)
   }
   invalidateCache(PRODUCTS_COLLECTION)
+  await updateRemoteCacheTimestamp()
 }
 
 async function getUserProfileFromFirestore(userId) {
@@ -869,13 +872,45 @@ function getAllProducts() {
   return [...seedProducts, ...extra].map(normalizeProduct)
 }
 
+async function getRemoteCacheTimestamp() {
+  if (!isFirebaseConfigured || !db) return null
+  try {
+    const docSnap = await getDoc(doc(db, METADATA_COLLECTION, CACHE_DOC))
+    if (docSnap.exists()) {
+      return docSnap.data().lastUpdatedAt
+    }
+  } catch (err) {
+    console.error('Failed to get remote cache timestamp:', err)
+  }
+  return null
+}
+
+async function updateRemoteCacheTimestamp() {
+  if (!isFirebaseConfigured || !db) return
+  try {
+    await setDoc(doc(db, METADATA_COLLECTION, CACHE_DOC), {
+      lastUpdatedAt: new Date().toISOString()
+    }, { merge: true })
+  } catch (err) {
+    console.error('Failed to update remote cache timestamp:', err)
+  }
+}
+
 async function getAllProductsFirestore() {
   if (!isFirebaseConfigured || !db) {
     return getAllProducts()
   }
 
   const cached = getCachedCollection(PRODUCTS_COLLECTION)
-  if (cached && Array.isArray(cached) && cached.length > 0) {
+  const localTimestamp = getCacheTimestamp(PRODUCTS_COLLECTION)
+  const remoteTimestamp = await getRemoteCacheTimestamp()
+
+  if (remoteTimestamp && localTimestamp) {
+    const isOutdated = new Date(remoteTimestamp).getTime() > new Date(localTimestamp).getTime()
+    if (!isOutdated && cached && Array.isArray(cached) && cached.length > 0) {
+      return cached.map(normalizeProduct)
+    }
+  } else if (!remoteTimestamp && cached && Array.isArray(cached) && cached.length > 0) {
     return cached.map(normalizeProduct)
   }
 
@@ -891,6 +926,13 @@ async function getAllProductsFirestore() {
 
   setCachedCollection(PRODUCTS_COLLECTION, products)
   products.forEach(p => setCachedProduct(p.id, p))
+
+  if (remoteTimestamp) {
+    setCacheTimestamp(PRODUCTS_COLLECTION, remoteTimestamp)
+  } else {
+    await updateRemoteCacheTimestamp()
+    setCacheTimestamp(PRODUCTS_COLLECTION, new Date().toISOString())
+  }
 
   return products
 }
@@ -1016,10 +1058,10 @@ function removeLocalProductsBySeller(userId) {
   const next = extra.filter((item) => item?.sellerId !== userId)
   safeWrite(EXTRA_PRODUCTS_KEY, next)
 
-  removedIds.forEach((productId) => {
+  for (const productId of removedIds) {
     removeProductFromAllFavorites(productId)
-    invalidateProductCache(productId)
-  })
+    invalidateProductCache(productId) // fire and forget
+  }
 }
 
 function removeProductFromAllFavorites(productId) {
@@ -1682,7 +1724,7 @@ export async function createProduct(payload, user) {
       isAdminPost: documentPayload.isAdminPost,
     })
 
-    invalidateProductCache()
+    await invalidateProductCache()
     return {
       ...documentPayload,
       id: created.id,
@@ -1720,7 +1762,7 @@ export async function createProduct(payload, user) {
 
   extra.unshift(newProduct)
   safeWrite(EXTRA_PRODUCTS_KEY, extra)
-  invalidateProductCache()
+  await invalidateProductCache()
 
   return {
     ...newProduct,
@@ -1853,7 +1895,7 @@ export async function updateProduct(productId, payload, user) {
       await sendSystemMessageToUser(current.sellerId, SYSTEM_MESSAGES.PRODUCT_INVALIDATED(updated.title), updated)
     }
 
-    invalidateProductCache(productId)
+    await invalidateProductCache(productId)
     return updated
   }
 
@@ -1915,7 +1957,7 @@ export async function updateProduct(productId, payload, user) {
 
   extra[index] = updated
   safeWrite(EXTRA_PRODUCTS_KEY, extra)
-  invalidateProductCache(productId)
+  await invalidateProductCache(productId)
 
   if (isAdminActor && !isOwner && nextModerationStatus === 'rejected') {
     await ensureUniBrikConversation({ uid: current.sellerId })
@@ -1967,7 +2009,7 @@ export async function deleteProduct(productId, user) {
       await sendSystemMessageToUser(current.sellerId, SYSTEM_MESSAGES.PRODUCT_DELETED(current.title), current)
     }
 
-    invalidateProductCache(productId)
+    await invalidateProductCache(productId)
     return
   }
 
@@ -1988,7 +2030,7 @@ export async function deleteProduct(productId, user) {
   safeWrite(EXTRA_PRODUCTS_KEY, extra)
   removeProductFromAllFavorites(productId)
   await markProductConversationsAsDeleted(productId)
-  invalidateProductCache(productId)
+  await invalidateProductCache(productId)
 
   if (isAdminActor && current.sellerId !== user.uid) {
     await ensureUniBrikConversation({ uid: current.sellerId })
@@ -2147,7 +2189,7 @@ async function applyModerationUpdate(productId, updater, options = {}) {
     const updated = normalizeProduct(updater(current))
 
     await updateDoc(reference, toModerationFields(updated, options))
-    invalidateProductCache(productId)
+    await invalidateProductCache(productId)
     return updated
   }
 
@@ -2163,7 +2205,7 @@ async function applyModerationUpdate(productId, updater, options = {}) {
 
   extra[index] = updated
   safeWrite(EXTRA_PRODUCTS_KEY, extra)
-  invalidateProductCache(productId)
+  await invalidateProductCache(productId)
 
   return updated
 }
@@ -2438,7 +2480,7 @@ async function setSellerProductsModerationByAdmin(sellerId, adminUser, moderatio
               reportedByEmail: '',
             })
 
-            invalidateProductCache(item.id)
+            await invalidateProductCache(item.id)
           }),
         )
       }
@@ -2826,6 +2868,6 @@ export function clearProductCache() {
   productCache.clear()
 }
 
-export function clearCachedProduct(productId) {
-  invalidateProductCache(productId)
+export async function clearCachedProduct(productId) {
+  await invalidateProductCache(productId)
 }
