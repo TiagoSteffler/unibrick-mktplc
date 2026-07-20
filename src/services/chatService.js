@@ -9,6 +9,10 @@ import {
   addDoc,
   deleteDoc,
   onSnapshot,
+  orderBy,
+  limit,
+  startAfter,
+  updateDoc
 } from 'firebase/firestore'
 import { db, isFirebaseConfigured } from '../firebase/config'
 
@@ -73,6 +77,7 @@ function normalizeConversation(data) {
     lastMessagePreview: String(data.lastMessagePreview || ''),
     unreadCounts: typeof data.unreadCounts === 'object' && data.unreadCounts ? data.unreadCounts : {},
     topicProduct: normalizeTopicProduct(data.topicProduct),
+    clearedAt: data.clearedAt || {},
   }
 }
 
@@ -207,6 +212,27 @@ async function cleanupConversationForUserFirestore(userId, conversation) {
   )
 }
 
+export async function clearConversationMessages(conversation, user) {
+  if (!conversation?.id || !user) return
+
+  const clearedAt = {
+    ...(conversation.clearedAt || {}),
+    [user.uid]: nowIso()
+  }
+
+  if (isFirebaseConfigured && db) {
+    await updateDoc(doc(db, CONVERSATIONS_COLLECTION, conversation.id), { clearedAt })
+    return
+  }
+
+  const convs = readConversationsLocal()
+  const conv = convs.find(c => c.id === conversation.id)
+  if (conv) {
+    conv.clearedAt = clearedAt
+    saveConversationsLocal(convs)
+  }
+}
+
 function upsertConversationLocal(conversation) {
   const conversations = readConversationsLocal()
   const index = conversations.findIndex((item) => item.id === conversation.id)
@@ -301,7 +327,11 @@ export function listenToConversationMessages(conversation, callback) {
       callback(msgs)
     }
 
-    const q = collection(db, CONVERSATIONS_COLLECTION, conversationId, 'messages')
+    const q = query(
+      collection(db, CONVERSATIONS_COLLECTION, conversationId, 'messages'),
+      orderBy('createdAt', 'desc'),
+      limit(15)
+    )
     const unsubPersonal = onSnapshot(q, (snapshot) => {
       personalMessages = snapshot.docs.map((item) =>
         normalizeMessage({
@@ -318,7 +348,11 @@ export function listenToConversationMessages(conversation, callback) {
 
     let unsubBroadcasts = () => {}
     if (isSystem) {
-      const qBroadcast = collection(db, 'unibrik_broadcasts')
+      const qBroadcast = query(
+        collection(db, 'unibrik_broadcasts'),
+        orderBy('createdAt', 'desc'),
+        limit(15)
+      )
       unsubBroadcasts = onSnapshot(qBroadcast, (snapshot) => {
         broadcastMessages = snapshot.docs.map((item) =>
           normalizeMessage({
@@ -359,6 +393,60 @@ export function listenToConversationMessages(conversation, callback) {
   const msgs = [...messages, ...broadcastLocal].map(normalizeMessage).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
   callback(msgs)
   return () => {}
+}
+
+export async function loadPreviousMessages(conversation, lastLoadedMessageCreatedAt) {
+  if (!conversation?.id || !lastLoadedMessageCreatedAt) return []
+
+  const conversationId = conversation.id
+  const isSystem = conversation.type === 'system'
+  const targetTime = typeof lastLoadedMessageCreatedAt === 'object' ? lastLoadedMessageCreatedAt : new Date(lastLoadedMessageCreatedAt)
+
+  if (isFirebaseConfigured && db) {
+    let personalMessages = []
+    let broadcastMessages = []
+
+    const q = query(
+      collection(db, CONVERSATIONS_COLLECTION, conversationId, 'messages'),
+      orderBy('createdAt', 'desc'),
+      startAfter(targetTime.toISOString()),
+      limit(15)
+    )
+    const snapshot = await getDocs(q)
+    personalMessages = snapshot.docs.map((item) =>
+      normalizeMessage({
+        id: item.id,
+        conversationId,
+        ...item.data(),
+      })
+    )
+
+    if (isSystem) {
+      const qBroadcast = query(
+        collection(db, 'unibrik_broadcasts'),
+        orderBy('createdAt', 'desc'),
+        startAfter(targetTime.toISOString()),
+        limit(15)
+      )
+      const snapBroadcast = await getDocs(qBroadcast)
+      broadcastMessages = snapBroadcast.docs.map((item) =>
+        normalizeMessage({
+          id: item.id,
+          conversationId,
+          senderId: UNI_BRIK_ID,
+          senderName: UNI_BRIK_NAME,
+          ...item.data(),
+        })
+      )
+    }
+
+    const msgs = [...personalMessages, ...broadcastMessages]
+    msgs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    return msgs
+  }
+
+  // Fallback local mock
+  return []
 }
 
 export async function ensureDirectConversation(currentUser, otherUser, options = {}) {

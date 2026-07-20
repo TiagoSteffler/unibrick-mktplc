@@ -284,7 +284,7 @@ h2 {
   position: sticky;
   top: calc(var(--topbar-height) + 34px);
   width: 300px;
-  max-height: calc(100vh - var(--topbar-height) - 52px);
+  max-height: max(calc(100vh - var(--topbar-height) - 52px), 800px);
   overflow: hidden;
 }
 

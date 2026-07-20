@@ -14,4 +14,8 @@ export const UI_TEXTS = {
   CHAT_EMPTY_STATE: 'Você não tem nenhuma conversa ativa.',
   GLOBAL_UNAUTHORIZED: 'Usuário não autenticado.',
   GLOBAL_BLACKLISTED: 'Sua conta está bloqueada.',
+  CONFIRM_HOME_MSG_DELETE: 'Deseja remover a mensagem da página inicial?',
+  CONFIRM_AD_DELETE: 'Tem certeza que deseja excluir este anúncio? Esta ação não pode ser desfeita.',
+  CONFIRM_USER_DELETE: 'Excluir perfil, anúncios e conversas deste usuário?',
+  CONFIRM_CHAT_DELETE: 'Deseja ocultar todas as mensagens desta conversa? As novas mensagens enviadas ou recebidas voltarão a aparecer normalmente.',
 }

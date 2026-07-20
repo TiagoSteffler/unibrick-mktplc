@@ -13,14 +13,8 @@ import {
 } from 'firebase/firestore'
 import { getIdTokenResult } from 'firebase/auth'
 import { deleteObject, getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage'
-import {
-  app,
-  auth,
-  db,
-  firebaseProjectId,
-  firebaseStorageBucket,
-  isFirebaseConfigured,
-} from '../firebase/config'
+import { db, isFirebaseConfigured, storage } from '../firebase/config'
+import { getCachedCollection, getCachedDoc, setCachedCollection, setCachedDoc, invalidateCache } from './cacheService'
 import { markProductConversationsAsDeleted, sendSystemMessageToUser, ensureUniBrikConversation } from './chatService'
 import { SYSTEM_MESSAGES } from '../config/messages'
 
@@ -35,7 +29,6 @@ const HOME_MESSAGE_DOC_ID = 'home_top_message'
 const MIN_PRODUCT_PHOTOS = 1
 const MAX_PRODUCT_PHOTOS = 5
 const MAX_PRODUCT_PRICE = 9999.99
-const PRODUCT_CACHE_TTL = 5 * 60 * 1000 // 5 minutos
 const ACCESS_CACHE_TTL = 60 * 1000
 const ADMIN_DOMAIN = 'gmail.com'
 const BLACKLIST_USERS_KEY = 'marketplace_blacklist_users'
@@ -45,10 +38,6 @@ const HOME_MESSAGE_KEY = 'marketplace_home_message'
 const configuredAdminEmails = parseAdminEmails(
   `${import.meta.env.VITE_ADMIN_EMAIL || ''},${import.meta.env.VITE_ADMIN_EMAILS || ''}`,
 )
-
-// Cache em memória para produtos
-const productCache = new Map()
-const accessCache = new Map()
 
 const seedSellers = {
   'seller-1': {
@@ -180,53 +169,22 @@ function getAccessCacheKey(user) {
 
 function getCachedAccess(user) {
   const cacheKey = getAccessCacheKey(user)
-
-  if (!cacheKey) {
-    return null
-  }
-
-  const cached = accessCache.get(cacheKey)
-
-  if (!cached) {
-    return null
-  }
-
-  const isExpired = Date.now() - cached.timestamp > ACCESS_CACHE_TTL
-
-  if (isExpired) {
-    accessCache.delete(cacheKey)
-    return null
-  }
-
-  return cached.data
+  return getCachedDoc('access', cacheKey)
 }
 
 function setCachedAccess(user, data) {
   const cacheKey = getAccessCacheKey(user)
-
-  if (!cacheKey) {
-    return
-  }
-
-  accessCache.set(cacheKey, {
-    data,
-    timestamp: Date.now(),
-  })
+  setCachedDoc('access', cacheKey, data)
 }
 
 function clearCachedAccess(user = null) {
   if (!user) {
-    accessCache.clear()
+    invalidateCache('access')
     return
   }
 
   const cacheKey = getAccessCacheKey(user)
-
-  if (!cacheKey) {
-    return
-  }
-
-  accessCache.delete(cacheKey)
+  invalidateCache('access', cacheKey)
 }
 
 function parseHomeMessageTemplate(rawTemplate) {
@@ -269,29 +227,18 @@ function normalizeHomeMessagePayload(payload = {}) {
 }
 
 function getCachedProduct(productId) {
-  const cached = productCache.get(productId)
-  if (!cached) {
-    return null
-  }
-
-  const isExpired = Date.now() - cached.timestamp > PRODUCT_CACHE_TTL
-  if (isExpired) {
-    productCache.delete(productId)
-    return null
-  }
-
-  return cached.data
+  return getCachedDoc(PRODUCTS_COLLECTION, productId)
 }
 
 function setCachedProduct(productId, product) {
-  productCache.set(productId, {
-    data: product,
-    timestamp: Date.now(),
-  })
+  setCachedDoc(PRODUCTS_COLLECTION, productId, product)
 }
 
 function invalidateProductCache(productId) {
-  productCache.delete(productId)
+  if (productId) {
+    invalidateCache(PRODUCTS_COLLECTION, productId)
+  }
+  invalidateCache(PRODUCTS_COLLECTION)
 }
 
 async function getUserProfileFromFirestore(userId) {
@@ -567,8 +514,6 @@ export async function resolveUserAccess(user, options = {}) {
   let isAdmin = false
 
   if (canBeAdmin) {
-    // Com Firebase ativo, o backend (Rules) nao confia em lista local/env.
-    // Evita sessao "admin" no frontend que falha com 403 no Storage.
     isAdmin = canTrustLocalAdminList && localAdminEmails.includes(normalizedUser.email)
 
     if (!isAdmin) {
@@ -753,20 +698,19 @@ async function uploadPhotosToStorage(files, user) {
     try {
       return await uploadWith(storage)
     } catch (primaryError) {
-      const hasFirestoreDomainBucket = firebaseStorageBucket.endsWith('.firebasestorage.app')
-      const fallbackBucket = firebaseProjectId ? `${firebaseProjectId}.appspot.com` : ''
+      const hasFirestoreDomainBucket = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET?.endsWith('.firebasestorage.app')
+      const fallbackBucket = import.meta.env.VITE_FIREBASE_PROJECT_ID ? `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.appspot.com` : ''
       const shouldRetryWithLegacyBucket =
         hasFirestoreDomainBucket &&
         fallbackBucket &&
-        fallbackBucket !== firebaseStorageBucket &&
-        app &&
+        fallbackBucket !== import.meta.env.VITE_FIREBASE_STORAGE_BUCKET &&
         isMissingBucketStorageError(primaryError)
 
       if (!shouldRetryWithLegacyBucket) {
         throw primaryError
       }
 
-      const fallbackStorage = getStorage(app, `gs://${fallbackBucket}`)
+      const fallbackStorage = getStorage(undefined, `gs://${fallbackBucket}`)
 
       try {
         return await uploadWith(fallbackStorage)
@@ -802,16 +746,16 @@ function isDataUrlPhoto(photo) {
 }
 
 function buildFallbackStorage() {
-  const hasFirestoreDomainBucket = firebaseStorageBucket.endsWith('.firebasestorage.app')
-  const fallbackBucket = firebaseProjectId ? `${firebaseProjectId}.appspot.com` : ''
+  const hasFirestoreDomainBucket = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET?.endsWith('.firebasestorage.app')
+  const fallbackBucket = import.meta.env.VITE_FIREBASE_PROJECT_ID ? `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.appspot.com` : ''
   const shouldUseFallback =
-    hasFirestoreDomainBucket && fallbackBucket && fallbackBucket !== firebaseStorageBucket && app
+    hasFirestoreDomainBucket && fallbackBucket && fallbackBucket !== import.meta.env.VITE_FIREBASE_STORAGE_BUCKET
 
   if (!shouldUseFallback) {
     return null
   }
 
-  return getStorage(app, `gs://${fallbackBucket}`)
+  return getStorage(undefined, `gs://${fallbackBucket}`)
 }
 
 async function deletePhotoFromStorage(photoUrl) {
@@ -930,15 +874,25 @@ async function getAllProductsFirestore() {
     return getAllProducts()
   }
 
+  const cached = getCachedCollection(PRODUCTS_COLLECTION)
+  if (cached && Array.isArray(cached) && cached.length > 0) {
+    return cached.map(normalizeProduct)
+  }
+
   const snapshot = await getDocs(collection(db, PRODUCTS_COLLECTION))
 
-  return snapshot.docs.map((item) => {
+  const products = snapshot.docs.map((item) => {
     const data = item.data()
     return normalizeProduct({
       id: item.id,
       ...data,
     })
   })
+
+  setCachedCollection(PRODUCTS_COLLECTION, products)
+  products.forEach(p => setCachedProduct(p.id, p))
+
+  return products
 }
 
 async function getProductByIdFirestore(productId, options = {}) {
@@ -967,7 +921,6 @@ async function getProductByIdFirestore(productId, options = {}) {
       : null
   }
 
-  // Verificar cache primeiro
   const cached = getCachedProduct(productId)
   if (cached) {
     return canViewerAccessProduct(cached, viewer, resolvedViewerAccess, {
@@ -990,7 +943,6 @@ async function getProductByIdFirestore(productId, options = {}) {
     ...snapshot.data(),
   })
 
-  // Armazenar no cache
   setCachedProduct(productId, product)
 
   return canViewerAccessProduct(product, viewer, resolvedViewerAccess, {
@@ -1252,12 +1204,10 @@ async function uploadUserProfilePhoto(photoData, userId) {
     throw new Error('Storage do Firebase não está configurado.')
   }
 
-  // Se não for data URL, retornar como está (já é URL)
   if (!String(photoData || '').startsWith('data:')) {
     return photoData
   }
 
-  // Converter data URL para Blob
   const response = await withTimeout(
     fetch(photoData),
     10000,
@@ -1284,20 +1234,19 @@ async function uploadUserProfilePhoto(photoData, userId) {
       'Tempo limite ao obter URL da foto de perfil.',
     )
   } catch (primaryError) {
-    const hasFirestoreDomainBucket = firebaseStorageBucket.endsWith('.firebasestorage.app')
-    const fallbackBucket = firebaseProjectId ? `${firebaseProjectId}.appspot.com` : ''
+    const hasFirestoreDomainBucket = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET?.endsWith('.firebasestorage.app')
+    const fallbackBucket = import.meta.env.VITE_FIREBASE_PROJECT_ID ? `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.appspot.com` : ''
     const shouldRetryWithLegacyBucket =
       hasFirestoreDomainBucket &&
       fallbackBucket &&
-      fallbackBucket !== firebaseStorageBucket &&
-      app &&
+      fallbackBucket !== import.meta.env.VITE_FIREBASE_STORAGE_BUCKET &&
       isMissingBucketStorageError(primaryError)
 
     if (!shouldRetryWithLegacyBucket) {
       throw primaryError
     }
 
-    const fallbackStorage = getStorage(app, `gs://${fallbackBucket}`)
+    const fallbackStorage = getStorage(undefined, `gs://${fallbackBucket}`)
     const fallbackRef = ref(fallbackStorage, path)
 
     await withTimeout(
@@ -1357,7 +1306,6 @@ export async function saveUserProfile(user, payload) {
 
   let processedPhotoURL = String(payload.photoURL || '').trim()
 
-  // Se Firestore está configurado, fazer upload de foto se necessário
   if (isFirebaseConfigured && db && isDataUrlPhoto(processedPhotoURL)) {
     try {
       processedPhotoURL = await withTimeout(
@@ -1383,7 +1331,6 @@ export async function saveUserProfile(user, payload) {
   profiles[user.uid] = normalized
   saveUserProfiles(profiles)
 
-  // Salvar no Firestore também
   if (isFirebaseConfigured && db) {
     const userProfileRef = doc(db, USER_PROFILES_COLLECTION, user.uid)
     const firestorePayload = {
@@ -1409,7 +1356,6 @@ export async function saveUserProfile(user, payload) {
       const shouldRetryWithoutInlinePhoto = isDataUrlPhoto(firestorePayload.photoURL)
 
       if (!shouldRetryWithoutInlinePhoto) {
-        // Não falhar se Firestore não funcionar, usar localStorage como fallback
         console.warn('Falha ao salvar perfil no Firestore:', err)
       } else {
         try {
@@ -1426,7 +1372,6 @@ export async function saveUserProfile(user, payload) {
             err,
           )
         } catch (retryErr) {
-          // Não falhar se Firestore não funcionar, usar localStorage como fallback
           console.warn('Falha ao salvar perfil no Firestore:', retryErr)
         }
       }
@@ -1601,7 +1546,6 @@ export async function getSellerById(sellerId) {
     return toSellerSummary(sellerId, normalizedLocalProfile)
   }
 
-  // Tentar buscar do Firestore
   const firestoreProfile = await getUserProfileFromFirestore(sellerId)
   if (firestoreProfile) {
     const normalizedFirestoreProfile = normalizeUserProfile(firestoreProfile, {
@@ -1738,6 +1682,7 @@ export async function createProduct(payload, user) {
       isAdminPost: documentPayload.isAdminPost,
     })
 
+    invalidateProductCache()
     return {
       ...documentPayload,
       id: created.id,
@@ -1775,6 +1720,7 @@ export async function createProduct(payload, user) {
 
   extra.unshift(newProduct)
   safeWrite(EXTRA_PRODUCTS_KEY, extra)
+  invalidateProductCache()
 
   return {
     ...newProduct,
@@ -1794,7 +1740,6 @@ export async function updateProduct(productId, payload, user) {
   }
 
   const isAdminActor = access.isAdmin
-
   const sellerIdentity = getPreferredUserIdentity(user)
   const sellerPhotoForDocuments = isDataUrlPhoto(sellerIdentity.photoURL)
     ? ''
@@ -1908,9 +1853,7 @@ export async function updateProduct(productId, payload, user) {
       await sendSystemMessageToUser(current.sellerId, SYSTEM_MESSAGES.PRODUCT_INVALIDATED(updated.title), updated)
     }
 
-    // Invalidar cache do produto atualizado
     invalidateProductCache(productId)
-
     return updated
   }
 
@@ -1922,7 +1865,6 @@ export async function updateProduct(productId, payload, user) {
   }
 
   const current = normalizeProduct(extra[index])
-
   const isOwner = current.sellerId === user.uid
 
   if (!isOwner && !isAdminActor) {
@@ -1973,6 +1915,7 @@ export async function updateProduct(productId, payload, user) {
 
   extra[index] = updated
   safeWrite(EXTRA_PRODUCTS_KEY, extra)
+  invalidateProductCache(productId)
 
   if (isAdminActor && !isOwner && nextModerationStatus === 'rejected') {
     await ensureUniBrikConversation({ uid: current.sellerId })
@@ -2024,9 +1967,7 @@ export async function deleteProduct(productId, user) {
       await sendSystemMessageToUser(current.sellerId, SYSTEM_MESSAGES.PRODUCT_DELETED(current.title), current)
     }
 
-    // Invalidar cache do produto deletado
     invalidateProductCache(productId)
-
     return
   }
 
@@ -2047,6 +1988,7 @@ export async function deleteProduct(productId, user) {
   safeWrite(EXTRA_PRODUCTS_KEY, extra)
   removeProductFromAllFavorites(productId)
   await markProductConversationsAsDeleted(productId)
+  invalidateProductCache(productId)
 
   if (isAdminActor && current.sellerId !== user.uid) {
     await ensureUniBrikConversation({ uid: current.sellerId })
@@ -2065,7 +2007,6 @@ export async function getMyProfile(user) {
     return toMyProfileData(user, normalizeUserProfile(localProfile, user))
   }
 
-  // Tentar buscar do Firestore primeiro
   const firestoreProfile = await getUserProfileFromFirestore(user.uid)
   if (firestoreProfile) {
     const normalizedProfile = normalizeUserProfile(firestoreProfile, user)
@@ -2074,7 +2015,6 @@ export async function getMyProfile(user) {
     return toMyProfileData(user, normalizedProfile)
   }
 
-  // Fallback para dados locais/seed
   return seedSellers[user.uid] || sellerFromUser(user)
 }
 
@@ -2207,7 +2147,7 @@ async function applyModerationUpdate(productId, updater, options = {}) {
     const updated = normalizeProduct(updater(current))
 
     await updateDoc(reference, toModerationFields(updated, options))
-    setCachedProduct(productId, updated)
+    invalidateProductCache(productId)
     return updated
   }
 
@@ -2223,7 +2163,7 @@ async function applyModerationUpdate(productId, updater, options = {}) {
 
   extra[index] = updated
   safeWrite(EXTRA_PRODUCTS_KEY, extra)
-  setCachedProduct(productId, updated)
+  invalidateProductCache(productId)
 
   return updated
 }
@@ -2324,7 +2264,7 @@ export async function getHomeMessage() {
 
     return null
   }
-
+  return null
 }
 
 export async function saveHomeMessageByAdmin(adminUser, payload = {}) {

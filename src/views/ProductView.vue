@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authState, isAdminSession } from '../services/authService'
 import { approveProductByAdmin, getProductById, isFavorite, rejectProductByAdmin, reportProduct, toggleFavorite, deleteProduct } from '../services/marketplaceService'
+import { UI_TEXTS } from '../config/messages'
 
 const route = useRoute()
 const router = useRouter()
@@ -406,7 +407,7 @@ async function deleteReportedProduct() {
     return
   }
 
-  if (!window.confirm('Tem certeza que deseja excluir este anúncio? Esta ação não pode ser desfeita.')) {
+  if (!window.confirm(UI_TEXTS.CONFIRM_AD_DELETE)) {
     return
   }
 

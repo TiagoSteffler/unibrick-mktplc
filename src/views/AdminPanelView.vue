@@ -17,6 +17,7 @@ import {
   saveHomeMessageByAdmin,
   unbanUserByAdmin,
 } from '../services/marketplaceService'
+import { UI_TEXTS } from '../config/messages'
 
 const user = computed(() => authState.value)
 
@@ -143,7 +144,7 @@ function saveAnnouncement() {
 }
 
 function clearAnnouncement() {
-  if (!window.confirm('Deseja remover a mensagem da página inicial?')) {
+  if (!window.confirm(UI_TEXTS.CONFIRM_HOME_MSG_DELETE)) {
     return
   }
 
@@ -182,7 +183,7 @@ function rejectProduct(productId) {
 }
 
 function deleteListing(productId) {
-  if (!window.confirm('Deseja excluir este anúncio? Esta ação não pode ser desfeita.')) {
+  if (!window.confirm(UI_TEXTS.CONFIRM_AD_DELETE)) {
     return
   }
 
@@ -229,7 +230,7 @@ function deleteUserData(targetUser) {
     return
   }
 
-  if (!window.confirm('Excluir perfil, anúncios e conversas deste usuário?')) {
+  if (!window.confirm(UI_TEXTS.CONFIRM_USER_DELETE)) {
     return
   }
 

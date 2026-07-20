@@ -11,6 +11,7 @@ import {
 } from '../services/marketplaceService'
 import {
   buildDirectConversationDraft,
+  clearConversationMessages,
   deleteConversationIfEmpty,
   ensureDirectConversation,
   ensureUniBrikConversation,
@@ -19,10 +20,12 @@ import {
   getUnreadCountForUser,
   listenToUserConversations,
   listenToConversationMessages,
+  loadPreviousMessages,
   markConversationAsRead,
   sendChatMessage,
   sendSystemBroadcast,
 } from '../services/chatService'
+import { UI_TEXTS } from '../config/messages'
 
 const route = useRoute()
 const router = useRouter()
@@ -56,6 +59,8 @@ async function checkAttachments(msgs) {
 const isLoadingConversations = ref(false)
 const isLoadingMessages = ref(false)
 const isSending = ref(false)
+const canLoadMore = ref(false)
+const isLoadingMore = ref(false)
 
 const hasConversations = computed(() => conversations.value.length > 0)
 const activeConversation = computed(
@@ -191,13 +196,22 @@ async function loadMessages() {
 
   isLoadingMessages.value = true
   chatError.value = ''
+  canLoadMore.value = false
 
   return new Promise((resolve) => {
     let isFirst = true
     unsubscribeMessages.value = listenToConversationMessages(activeConversation.value, async (data) => {
-      messages.value = data
+      canLoadMore.value = data.length >= 15
+      const clearTimeStr = activeConversation.value?.clearedAt?.[user.value?.uid]
+      let filtered = data
+      if (clearTimeStr) {
+        const clearTime = new Date(clearTimeStr).getTime()
+        filtered = data.filter(m => new Date(m.createdAt).getTime() > clearTime)
+      }
+      
+      messages.value = filtered
       isLoadingMessages.value = false
-      checkAttachments(data)
+      checkAttachments(filtered)
       scrollToBottom()
 
       if (user.value && activeConversation.value) {
@@ -253,12 +267,6 @@ function buildTopicProduct(product) {
 async function handleProductChatIntent() {
   const sellerId = typeof route.query.sellerId === 'string' ? route.query.sellerId : ''
   const productId = typeof route.query.productId === 'string' ? route.query.productId : ''
-
-  if (!sellerId || !user.value || sellerId === user.value.uid) {
-    return
-  }
-
-  chatError.value = ''
 
   try {
     let product = null
@@ -420,6 +428,54 @@ async function sendMessage() {
   }
 }
 
+async function clearActiveConversation() {
+  if (!activeConversation.value || !user.value) return
+  if (!window.confirm(UI_TEXTS.CONFIRM_CHAT_DELETE)) return
+
+  try {
+    await clearConversationMessages(activeConversation.value, user.value)
+    messages.value = []
+  } catch (err) {
+    chatError.value = err instanceof Error ? err.message : 'Falha ao apagar conversa.'
+  }
+}
+
+async function loadMoreMessages() {
+  if (isLoadingMore.value || !messages.value.length || !activeConversation.value) return
+  
+  isLoadingMore.value = true
+  try {
+    const oldestMessageTime = messages.value[0].createdAt
+    const olderMessages = await loadPreviousMessages(activeConversation.value, oldestMessageTime)
+    
+    const clearTimeStr = activeConversation.value?.clearedAt?.[user.value?.uid]
+    let filteredOlder = olderMessages
+    if (clearTimeStr) {
+      const clearTime = new Date(clearTimeStr).getTime()
+      filteredOlder = olderMessages.filter(m => new Date(m.createdAt).getTime() > clearTime)
+    }
+
+    if (filteredOlder.length < 15) {
+      canLoadMore.value = false
+    }
+    
+    messages.value = [...filteredOlder, ...messages.value]
+  } catch (err) {
+    chatError.value = 'Falha ao carregar mensagens antigas.'
+  } finally {
+    isLoadingMore.value = false
+  }
+}
+
+function isConversationCleared(conversation) {
+  if (!user.value || !conversation) return false
+  const clearTimeStr = conversation.clearedAt?.[user.value.uid]
+  if (!clearTimeStr) return false
+  const clearTime = new Date(clearTimeStr).getTime()
+  const updatedTime = new Date(conversation.updatedAt).getTime()
+  return updatedTime <= clearTime
+}
+
 async function initializeChat() {
   if (!user.value) {
     return
@@ -502,7 +558,7 @@ watch(
                 {{ getUnreadCount(conversation) }}
               </span>
             </div>
-            <small class="muted">{{ conversation.lastMessagePreview || 'Sem mensagens' }}</small>
+            <small class="muted">{{ isConversationCleared(conversation) ? 'Sem mensagens recentes' : (conversation.lastMessagePreview || 'Sem mensagens') }}</small>
           </button>
         </li>
       </ul>
@@ -516,9 +572,14 @@ watch(
             <p v-if="activeTopicProduct" class="muted">Vendedor: {{ activePeer?.name }}</p>
             <p v-if="isReadOnlyConversation" class="muted">Conversa somente leitura.</p>
           </div>
-          <RouterLink v-if="activeTopicProduct && !activeTopicProduct.deleted" :to="`/product/${activeTopicProduct.productId}`" class="btn btn-sm">
-            Ir ao anúncio
-          </RouterLink>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" @click="clearActiveConversation" class="btn btn-sm btn-danger" style="background-color: #ef4444; color: white; border: none;">
+              Apagar Chat
+            </button>
+            <RouterLink v-if="activeTopicProduct && !activeTopicProduct.deleted" :to="`/product/${activeTopicProduct.productId}`" class="btn btn-sm">
+              Ir ao anúncio
+            </RouterLink>
+          </div>
         </div>
       </header>
 
@@ -530,6 +591,12 @@ watch(
         <div v-if="isLoadingMessages" class="section-loading-overlay" aria-live="polite">
           <span class="spinner" aria-hidden="true"></span>
           <p>Carregando mensagens...</p>
+        </div>
+
+        <div v-if="canLoadMore && !isLoadingMessages && messages.length > 0" style="text-align: center; padding-bottom: 10px;">
+          <button @click="loadMoreMessages" class="btn btn-sm" :disabled="isLoadingMore">
+            {{ isLoadingMore ? 'Carregando...' : 'Carregar mensagens anteriores' }}
+          </button>
         </div>
 
         <article
@@ -723,7 +790,7 @@ watch(
 .chat-messages {
   position: relative;
   min-height: 280px;
-  max-height: 60vh;
+  max-height: 65vh;
   overflow: auto;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
