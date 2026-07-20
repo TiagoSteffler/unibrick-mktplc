@@ -512,6 +512,10 @@ export function buildDirectConversationDraft(currentUser, otherUser, options = {
     throw new Error('Dados de conversa inválidos.')
   }
 
+  if (currentUser.uid === otherUser.id) {
+    throw new Error('Você não pode iniciar uma conversa consigo mesmo.')
+  }
+
   const topicProduct = normalizeTopicProduct(options.topicProduct)
   return createDirectConversationBase(currentUser, otherUser, nowIso(), topicProduct)
 }

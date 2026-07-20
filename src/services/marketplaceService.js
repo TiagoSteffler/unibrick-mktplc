@@ -1764,7 +1764,7 @@ export async function updateProduct(productId, payload, user) {
 
     const isOwner = current.sellerId === user.uid
 
-    if (!isOwner && !isAdminActor) {
+    if (!isOwner) {
       throw new Error('Você não tem permissão para editar este anúncio.')
     }
 
@@ -1867,7 +1867,7 @@ export async function updateProduct(productId, payload, user) {
   const current = normalizeProduct(extra[index])
   const isOwner = current.sellerId === user.uid
 
-  if (!isOwner && !isAdminActor) {
+  if (!isOwner) {
     throw new Error('Você não tem permissão para editar este anúncio.')
   }
 

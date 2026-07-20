@@ -289,7 +289,7 @@ onMounted(() => {
 
         <div v-else-if="!pendingProducts.length" class="muted">Não há anúncios pendentes.</div>
 
-        <div v-else class="grid" style="gap: 12px">
+        <div v-else class="grid scrollable-list" style="gap: 12px">
           <article v-for="product in pendingProducts" :key="`pending-${product.id}`" class="admin-item">
             <div class="admin-item-head">
               <h3>{{ product.title }}</h3>
@@ -298,7 +298,7 @@ onMounted(() => {
             <p class="muted">{{ formatPrice(product.price) }} | {{ product.category }} | {{
               getModerationStatusLabel(product) }}</p>
             <p class="muted">Vendedor: {{ product.sellerName }}</p>
-            <div class="action-row">
+            <div class="action-row" style="">
               <button class="btn" type="button" :disabled="isActing"
                 @click="approveProduct(product.id)">Aprovar</button>
               <button class="btn secondary" type="button" :disabled="isActing" @click="rejectProduct(product.id)">Marcar
@@ -318,7 +318,7 @@ onMounted(() => {
 
         <div v-else-if="!reportedProducts.length" class="muted">Não há anúncios reportados.</div>
 
-        <div v-else class="grid" style="gap: 12px">
+        <div v-else class="grid scrollable-list" style="gap: 12px">
           <article v-for="product in reportedProducts" :key="`reported-${product.id}`"
             class="admin-item admin-item-reported">
             <div class="admin-item-content">
@@ -359,7 +359,7 @@ onMounted(() => {
 
       <div v-else-if="!users.length" class="muted">Nenhum usuário encontrado.</div>
 
-      <div v-else class="grid" style="gap: 10px">
+      <div v-else class="grid scrollable-list" style="gap: 10px">
         <article v-for="person in users" :key="`user-${person.uid}`" class="admin-item user-item admin-item-reported">
           <div class="admin-item-content">
             <div class="user-head admin-item-title">
@@ -434,6 +434,12 @@ h3 {
 .two-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.scrollable-list {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .admin-item {

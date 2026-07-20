@@ -107,9 +107,8 @@ async function loadProduct() {
       return
     }
 
-    if (!user.value || (product.sellerId !== user.value.uid && !isAdminSession.value)) {
-      error.value = 'Você não pode editar este anúncio.'
-      loading.value = false
+    if (!user.value || product.sellerId !== user.value.uid) {
+      router.replace({ name: 'not-found' })
       return
     }
 
