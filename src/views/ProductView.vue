@@ -526,12 +526,16 @@ watch(
           </button>
 
           <button
-            class="favorite-star-btn"
+            class="favorite-btn"
             type="button"
             :aria-label="favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'"
             @click="handleFavorite"
           >
-            <span :class="['favorite-star-icon', { active: favorite }]">{{ favorite ? '★' : '☆' }}</span>
+            <span :class="['favorite-icon', { active: favorite }]">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 21s-6.7-4.35-9.33-7.97A5.75 5.75 0 0 1 12 5.5a5.75 5.75 0 0 1 9.33 7.53C18.7 16.65 12 21 12 21z"></path>
+              </svg>
+            </span>
           </button>
         </div>
       </div>

@@ -111,6 +111,15 @@ async function initialize() {
   isLoading.value = true
 
   try {
+    if (route.query.maxPrice !== undefined) {
+      filters.maxPrice = route.query.maxPrice
+      const cents = Math.min(Number.parseFloat(route.query.maxPrice) * 100 || 0, MAX_PRICE_CENTS)
+      priceDisplay.maxPrice = formatCurrencyValue(cents / 100)
+    }
+    if (route.query.sortBy !== undefined) {
+      filters.sortBy = route.query.sortBy
+    }
+
     categories.value = await getAvailableCategories({ viewer: currentUser.value })
     await loadProducts()
   } finally {
@@ -152,12 +161,10 @@ watch(currentUser, () => {
 <template>
   <section class="search-layout">
     <aside class="card filters-panel">
-      <h1>Pesquisa</h1>
-      <p class="muted">Filtre por preço, categoria e outros critérios.</p>
-
       <button
         type="button"
         class="btn secondary filters-toggle"
+        style="width: 100%; justify-content: center; margin-top: 0px;"
         :aria-expanded="areFiltersOpen"
         @click="toggleFilters"
       >
@@ -240,11 +247,10 @@ watch(currentUser, () => {
 
     <section class="grid search-results">
       <article class="card">
-        <h2>Resultados</h2>
-        <p class="muted" v-if="route.query.q">
-          Busca atual: "{{ route.query.q }}"
+        <h2>Busca: {{ route.query.q }}</h2>
+        <p class="muted" style="margin-top: 4px; margin-bottom: 4px;">
+          {{ products.length }} produto(s) encontrado(s).
         </p>
-        <p class="muted">{{ products.length }} produto(s) encontrado(s).</p>
       </article>
 
       <section class="loading-section search-products-section">

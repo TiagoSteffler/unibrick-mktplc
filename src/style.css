@@ -102,12 +102,18 @@ a {
 }
 
 .search-icon {
-  width: 12px;
-  height: 12px;
+  width: 15px;
+  height: 15px;
   border: 2px solid #334155;
   border-radius: 50%;
   position: relative;
 }
+
+.menu-icon {
+  height: 28px;
+  width: 28px;
+}
+
 
 .search-icon::after {
   content: '';
@@ -138,7 +144,7 @@ a {
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
   border-radius: 999px;
-  padding: 10px 12px;
+  padding: 10px 10px;
   font-size: 14px;
   align-items: center;
   display: inline-flex;
@@ -148,11 +154,13 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  height:45px;
+  min-width: 45px;
 }
 
 .menu-icon {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
 }
 
 .menu-label {
@@ -179,7 +187,7 @@ a {
 }
 
 .page-wrap {
-  padding-top: calc(var(--topbar-height) + 34px)
+  padding-top: calc(var(--topbar-height) + 30px)
 }
 
 .page-wrap-onboarding {
@@ -543,8 +551,8 @@ select {
 }
 
 .product-main-photo.photo-fit-portrait {
-  width: 100%;
-  height: auto;
+  width: auto;
+  height: 100%;
   max-width: 100%;
   max-height: 100%;
 }
@@ -636,7 +644,7 @@ select {
   gap: 12px;
 }
 
-.favorite-star-btn {
+.favorite-btn {
   border: 1px solid #d1dce8;
   background: #fff;
   width: 42px;
@@ -648,18 +656,18 @@ select {
   flex-shrink: 0;
 }
 
-.favorite-star-btn:hover {
+.favorite-btn:hover {
   background: #f8fafc;
 }
 
-.favorite-star-icon {
-  font-size: 24px;
-  line-height: 1;
+.favorite-icon {
+  width: 24px;
+  height: 24px;
   color: #475569;
 }
 
-.favorite-star-icon.active {
-  color: #eab308;
+.favorite-icon.active {
+  color: #ef4444;
 }
 
 .product-price {
@@ -735,18 +743,21 @@ select {
 
 .photo-modal-content {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr auto;
   gap: 20px;
   max-width: 90vw;
+  width: 100%;
   max-height: 90vh;
   align-items: center;
+  justify-items: center;
 }
 
 .photo-modal-viewer {
   position: relative;
   width: 100%;
-  height: 80vh;
-  max-width: calc(90vh * 16 / 11);
+  height: 75vh;
+  max-width: 1000px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -771,20 +782,23 @@ select {
 }
 
 .photo-modal-image.photo-fit-portrait {
-  width: 100%;
-  height: auto;
+  width: auto;
+  height: 100%;
   max-width: 100%;
   max-height: 100%;
 }
 
 .photo-modal-gallery {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 12px;
-  max-height: 80vh;
-  overflow-y: auto;
-  padding-right: 8px;
+  max-height: none;
+  max-width: 1000px;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
   padding-bottom: 8px;
+  justify-content: center;
 }
 
 .photo-modal-gallery::-webkit-scrollbar {
@@ -832,25 +846,15 @@ select {
 }
 
 @media (max-width: 1200px) {
-  .photo-modal-content {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-
-  .photo-modal-gallery {
-    display: flex;
-    flex-direction: row;
-    max-height: none;
-    max-width: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding-bottom: 8px;
-  }
-
   .photo-modal-viewer {
-    max-width: 100%;
     height: calc(90vw * 11 / 16);
     max-height: 60vh;
+  }
+}
+
+@media (max-width: 960px) {
+  .topbar .menu-item:not(.profile-link) .menu-label {
+    display: none;
   }
 }
 
@@ -888,7 +892,13 @@ select {
 
 @media (max-width: 768px) {
   :root {
-    --topbar-height: 132px;
+    --topbar-height: 80px;
+  }
+
+  .grid.products {
+    grid-template-columns: 1fr;
+    gap: 0;
+    margin: 0 -16px;
   }
 
   .topbar {
@@ -898,7 +908,7 @@ select {
     transform: none;
     grid-template-columns: 1fr;
     gap: 8px;
-    padding: 10px 14px;
+    padding: 14px 18px;
   }
 
   .topbar-main {
@@ -907,7 +917,7 @@ select {
   }
 
   .brand-logo {
-    height: 44px;
+    height: 52px;
   }
 
   .menu {
@@ -925,9 +935,14 @@ select {
     background: rgba(255, 255, 255, 0.95);
     border: 1px solid #dbe4ee;
     border-radius: 16px;
-    padding: 8px 10px;
+    padding: 12px 14px;
     z-index: 20;
     overflow: hidden;
+  }
+
+  .mobile-bottom-menu .menu-icon {
+    width: 24px;
+    height: 24px;
   }
 
   .mobile-bottom-menu a {
@@ -960,8 +975,20 @@ select {
     grid-template-columns: 1fr;
   }
 
-  .page-wrap {
-    padding-bottom: 84px;
+  .product-main-photo-wrap {
+    aspect-ratio: 1 / 1;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    width: calc(100% + 32px);
+    margin-left: -16px;
   }
 
+  .product-thumbs-row {
+    display: none;
+  }
+
+  .page-wrap {
+    padding-bottom: 64px;
+  }
 }

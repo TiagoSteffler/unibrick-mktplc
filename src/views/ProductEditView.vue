@@ -402,19 +402,25 @@ onMounted(() => {
           <div v-if="previewPhotos.length" class="photo-preview-grid">
             <div v-for="(photo, index) in previewPhotos" :key="`${photo}-${index}`" class="photo-chip">
               <img :src="photo" :alt="`Foto ${index + 1}`" />
-              <button type="button" class="btn danger" @click="removePhoto(index)" :disabled="isBusy">Remover</button>
+              <button type="button" class="btn danger" @click="removePhoto(index)" :disabled="isBusy">
+                  <svg style="width: 16px; height: 16px" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2-icon lucide-trash-2"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  <text>Remover</text>
+              </button>
             </div>
           </div>
         </div>
 
         <div class="action-row align-end full-width">
           <RouterLink to="/my/products" class="btn secondary" :class="{ disabled: isBusy }">
+            <svg style="width: 16px; height: 16px" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-x-icon lucide-circle-x"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
             Cancelar
           </RouterLink>
           <button type="button" class="btn danger" @click="handleDelete" :disabled="isBusy">
+            <svg style="width: 16px; height: 16px" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2-icon lucide-trash-2"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             {{ isDeleting ? 'Excluindo...' : 'Excluir anúncio' }}
           </button>
           <button class="btn" type="submit" :disabled="isBusy">
+            <svg style="width: 16px; height: 16px" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-save-icon lucide-save"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
             {{ isSubmitting ? 'Salvando...' : 'Salvar alterações' }}
           </button>
         </div>

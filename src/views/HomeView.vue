@@ -63,9 +63,12 @@ watch(currentUser, () => {
         </div>
 
         <section class="grid products" v-if="freeProducts.length">
-          <ProductCard v-for="product in freeProducts" :key="product.id" :product="product" />
+          <ProductCard v-for="product in freeProducts.slice(0, 3)" :key="product.id" :product="product" />
         </section>
-        <p v-else class="card muted">Nenhum anúncio gratuito no momento.</p>
+        <div v-if="freeProducts.length > 3" style="text-align: center; margin-top: 16px;">
+          <RouterLink to="/search?maxPrice=0" class="btn secondary" style="min-width: 120px;">Mais</RouterLink>
+        </div>
+        <p v-else-if="freeProducts.length === 0" class="card muted">Nenhum anúncio gratuito no momento.</p>
       </section>
     </section>
 
@@ -78,9 +81,12 @@ watch(currentUser, () => {
         </div>
 
         <section class="grid products" v-if="recentProducts.length">
-          <ProductCard v-for="product in recentProducts" :key="product.id" :product="product" />
+          <ProductCard v-for="product in recentProducts.slice(0, 3)" :key="product.id" :product="product" />
         </section>
-        <p v-else class="card muted">Nenhum anúncio recente encontrado.</p>
+        <div v-if="recentProducts.length > 3" style="text-align: center; margin-top: 16px;">
+          <RouterLink to="/search" class="btn secondary" style="min-width: 120px;">Mais</RouterLink>
+        </div>
+        <p v-else-if="recentProducts.length === 0" class="card muted">Nenhum anúncio recente encontrado.</p>
       </section>
     </section>
   </section>
@@ -141,7 +147,7 @@ h2 {
 }
 
 .home-products-section {
-  min-height: 200px;
+  min-height: 160px;
 }
 
 @media (max-width: 640px) {

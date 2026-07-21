@@ -140,6 +140,11 @@ function getTopicIntroText(message) {
     : `O comprador perguntou sobre: ${safeTitle}`
 }
 
+function truncateName(name, maxLength) {
+  if (!name) return ''
+  return name.length > maxLength ? name.substring(0, maxLength) + '...' : name
+}
+
 function buildAttachmentFromProduct(product) {
   if (!product) {
     return null
@@ -172,9 +177,6 @@ async function loadConversations() {
     let isFirst = true
     unsubscribeConversations.value = listenToUserConversations(user.value, (data) => {
       conversations.value = data
-      if (!activeConversationId.value && conversations.value.length) {
-        activeConversationId.value = conversations.value[0].id
-      }
       isLoadingConversations.value = false
       if (isFirst) {
         isFirst = false
@@ -289,6 +291,13 @@ async function handleProductChatIntent() {
       seller = null
     }
 
+    if (sellerId && user.value?.uid === sellerId) {
+      router.replace({ name: 'chat' })
+      return
+    }
+
+    const moderationStatus = String(product?.moderationStatus || '').trim().toLowerCase()
+
     if (productId) {
       if (!product) {
         throw new Error('Este anúncio não está mais disponível para iniciar conversa.')
@@ -297,8 +306,6 @@ async function handleProductChatIntent() {
       if (String(product.sellerId || '') !== sellerId) {
         throw new Error('O anúncio informado não pertence ao vendedor selecionado.')
       }
-
-      const moderationStatus = String(product.moderationStatus || '').trim().toLowerCase()
 
       if (moderationStatus !== 'approved') {
         throw new Error('Só é possível iniciar conversa por anúncios aprovados.')
@@ -319,6 +326,14 @@ async function handleProductChatIntent() {
       name: seller?.name || 'Vendedor',
       photoURL: seller?.photoURL || '',
     }
+    
+    let currentUserProfile = null
+    try {
+      currentUserProfile = await getSellerById(user.value.uid)
+    } catch {
+      // Ignore
+    }
+    const currentUserObj = { ...user.value, fullName: currentUserProfile?.name }
 
     const topicProduct = buildTopicProduct(product)
 
@@ -329,8 +344,8 @@ async function handleProductChatIntent() {
     const shouldPatchTopicOnExisting = Boolean(existing && topicProduct && !existing.topicProduct)
 
     const conversation = shouldPatchTopicOnExisting
-      ? await ensureDirectConversation(user.value, sellerPayload, { topicProduct })
-      : existing || buildDirectConversationDraft(user.value, sellerPayload, { topicProduct })
+      ? await ensureDirectConversation(currentUserObj, sellerPayload, { topicProduct })
+      : existing || buildDirectConversationDraft(currentUserObj, sellerPayload, { topicProduct })
 
     const alreadyInList = conversations.value.some((item) => item.id === conversation.id)
 
@@ -525,7 +540,7 @@ watch(
 </script>
 
 <template>
-  <section class="chat-layout loading-section">
+  <section class="chat-layout loading-section" :class="{ 'has-active-chat': !!activeConversationId }">
     <div v-if="isLoadingConversations" class="section-loading-overlay" aria-live="polite">
       <span class="spinner" aria-hidden="true"></span>
       <p>Carregando conversas...</p>
@@ -553,7 +568,7 @@ watch(
             @click="selectConversation(conversation.id)"
           >
             <div class="chat-conversation-head">
-              <strong>{{ getConversationPeer(conversation, user?.uid || '').name }}</strong>
+              <strong>{{ truncateName(getConversationPeer(conversation, user?.uid || '').name, 32) }}</strong>
               <span v-if="getUnreadCount(conversation) > 0" class="chat-unread-badge">
                 {{ getUnreadCount(conversation) }}
               </span>
@@ -567,18 +582,23 @@ watch(
     <section class="card chat-main" v-if="hasConversations && activeConversation">
       <header class="chat-main-header">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; width: 100%;">
-          <div>
-            <h2>{{ activeTopicProduct ? activeTopicProduct.title : (activePeer?.name || 'Conversa') }}</h2>
-            <p v-if="activeTopicProduct" class="muted">Vendedor: {{ activePeer?.name }}</p>
-            <p v-if="isReadOnlyConversation" class="muted">Conversa somente leitura.</p>
-          </div>
-          <div style="display: flex; gap: 8px;">
-            <button type="button" @click="clearActiveConversation" class="btn btn-sm btn-danger" style="background-color: #ef4444; color: white; border: none;">
-              Apagar Chat
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <button type="button" class="btn btn-sm back-to-list-btn" @click="activeConversationId = ''" aria-label="Voltar">
+              <svg style="width: 24px; height: 24px;" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left-icon lucide-arrow-left"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
             </button>
-            <RouterLink v-if="activeTopicProduct && !activeTopicProduct.deleted" :to="`/product/${activeTopicProduct.productId}`" class="btn btn-sm">
-              Ir ao anúncio
-            </RouterLink>
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <h2>{{ truncateName(activePeer?.name || 'Conversa', 15) }}</h2>
+                <RouterLink v-if="activePeer && activePeer.id" :to="`/seller/${activePeer.id}`" class="btn_alt" title="Ver perfil">
+                  <svg style="width: 20px; height: 20px;" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-move-up-right-icon lucide-move-up-right"><path d="M13 5H19V11"/><path d="M19 5L5 19"/></svg>                </RouterLink>
+              </div>
+              <p v-if="isReadOnlyConversation" class="muted">Conversa somente leitura.</p>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; ">
+            <button type="button" @click="clearActiveConversation" class="btn btn-sm btn-danger" style="background-color: #ef4444; color: white; border: none;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2-icon lucide-trash-2"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
           </div>
         </div>
       </header>
@@ -651,7 +671,7 @@ watch(
         </article>
       </section>
 
-      <footer class="chat-composer">
+      <footer v-if="!isReadOnlyConversation" class="chat-composer">
         <div v-if="pendingAttachment" class="chat-pending-attachment">
           <small class="muted">Anexo será enviado na próxima mensagem:</small>
           <strong>{{ pendingAttachment.title }}</strong>
@@ -674,10 +694,12 @@ watch(
           </button>
         </form>
       </footer>
+      <footer v-else style="height:0px"></footer>
     </section>
 
-    <section v-else class="card chat-empty-state">
-      <p class="muted">Você não tem nenhuma conversa ativa.</p>
+    <section v-else class="card chat-empty-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-message-square-icon lucide-message-square" style="width: 48px; height: 48px; color: #94a3b8; margin-bottom: 16px;"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/></svg>
+      <p class="muted" style="margin: 0; text-align: center;">Clique em alguma conversa ativa para iniciar o chat</p>
     </section>
   </section>
 </template>
@@ -900,14 +922,66 @@ watch(
   display: grid;
   place-items: center;
 }
+.btn_alt {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 5px 5px;
+  font-size: 14px;
+  align-items: center;
+  display: inline-flex;
+}
 
 @media (max-width: 960px) {
   .chat-layout {
     grid-template-columns: 1fr;
+    height: calc(100vh - 200px);
+    overflow: hidden;
+  }
+
+  .chat-sidebar {
+    height: 100%;
+    overflow-y: auto;
   }
 
   .chat-main {
-    min-height: 460px;
+    height: 100%;
+    overflow: hidden;
   }
+
+  .chat-messages {
+    max-height: none;
+    height: 100%;
+    min-height: 0;
+  }
+
+  /* When a chat is active on mobile */
+  .chat-layout.has-active-chat .chat-sidebar {
+    display: none;
+  }
+
+  /* When no chat is active on mobile */
+  .chat-layout:not(.has-active-chat) .chat-main {
+    display: none;
+  }
+
+  .chat-layout:not(.has-active-chat) .chat-empty-state {
+    display: none;
+  }
+
+  .back-to-list-btn {
+    display: inline-block !important;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+    display: flex;
+    line-height: 1;
+  }
+}
+
+.back-to-list-btn {
+  display: none;
 }
 </style>

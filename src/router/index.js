@@ -98,6 +98,13 @@ const router = createRouter({
   // Hash mode avoids direct URL 404 issues on static hosts like GitHub Pages.
   history: createWebHashHistory(import.meta.env.BASE_URL),
   routes,
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition
+    } else {
+      return { top: 0, left: 0 }
+    }
+  },
 })
 
 initAuth()

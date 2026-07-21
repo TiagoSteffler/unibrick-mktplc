@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { authState, isAdminSession } from './services/authService'
 import { getUserProfile } from './services/marketplaceService'
 import appLogo from './assets/blue-logo-1-CDTEx3Yb.png'
+import InstallPrompt from './components/InstallPrompt.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -58,6 +59,7 @@ function goToProtected(path) {
 
 <template>
   <div class="app-shell">
+    <InstallPrompt />
     <header v-if="!hideNavigationChrome" class="topbar">
       <div class="topbar-main">
         <RouterLink to="/" class="brand">
@@ -92,16 +94,11 @@ function goToProtected(path) {
           <span class="menu-label">Favoritos</span>
         </a>
 
-        <a
-          href="/my/products"
-          class="menu-item"
-          @click.prevent="goToProtected('/my/products')"
-          aria-label="Meus anúncios"
-        >
-          <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 7h18"></path>
-            <path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"></path>
-            <path d="M5 7l1 13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-13"></path>
+        <a href="/my/products" class="menu-item" @click.prevent="goToProtected('/my/products')" aria-label="Meus anúncios">
+          <svg class="menu-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 21v-5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5"/>
+            <path d="M17.774 10.31a1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.451 0 1.12 1.12 0 0 0-1.548 0 2.5 2.5 0 0 1-3.452 0 1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.77-3.248l2.889-4.184A2 2 0 0 1 7 2h10a2 2 0 0 1 1.653.873l2.895 4.192a2.5 2.5 0 0 1-3.774 3.244"/>
+            <path d="M4 10.95V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.05"/>
           </svg>
           <span class="menu-label">Meus Anúncios</span>
         </a>
@@ -156,10 +153,10 @@ function goToProtected(path) {
         @click.prevent="goToProtected('/my/products')"
         aria-label="Meus anúncios"
       >
-        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 7h18"></path>
-          <path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"></path>
-          <path d="M5 7l1 13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-13"></path>
+        <svg class="menu-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 21v-5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5"/>
+          <path d="M17.774 10.31a1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.451 0 1.12 1.12 0 0 0-1.548 0 2.5 2.5 0 0 1-3.452 0 1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.77-3.248l2.889-4.184A2 2 0 0 1 7 2h10a2 2 0 0 1 1.653.873l2.895 4.192a2.5 2.5 0 0 1-3.774 3.244"/>
+          <path d="M4 10.95V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.05"/>
         </svg>
       </a>
 

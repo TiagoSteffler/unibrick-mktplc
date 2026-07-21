@@ -25,6 +25,21 @@ const pendingProducts = ref([])
 const reportedProducts = ref([])
 const users = ref([])
 const blacklistedUsers = ref([])
+const searchUserQuery = ref('')
+
+const filteredUsers = computed(() => {
+  if (!searchUserQuery.value.trim()) {
+    return users.value
+  }
+  
+  const queryWords = searchUserQuery.value.toLowerCase().split(/\s+/)
+  
+  return users.value.filter(user => {
+    const nameLower = String(user.name || '').toLowerCase()
+    // Match any subword of the user's name
+    return queryWords.every(word => nameLower.includes(word))
+  })
+})
 
 const announcementForm = reactive({
   title: '',
@@ -352,64 +367,60 @@ onMounted(() => {
     </section>
 
     <article class="card grid" style="gap: 12px">
-      <h2>Usuários</h2>
-      <p class="muted">Controle de contas, blacklist e limpeza de dados de perfil/anúncios.</p>
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <h2>Usuários</h2>
+          <p class="muted">Controle de contas, blacklist e limpeza de dados de perfil/anúncios.</p>
+        </div>
+        <input 
+          v-model="searchUserQuery" 
+          type="search" 
+          placeholder="Buscar usuário por nome..." 
+          style="max-width: 300px; border-radius: 12px;" 
+        />
+      </div>
 
       <div v-if="isLoading" class="muted">Carregando usuários...</div>
 
       <div v-else-if="!users.length" class="muted">Nenhum usuário encontrado.</div>
 
-      <div v-else class="grid scrollable-list" style="gap: 10px">
-        <article v-for="person in users" :key="`user-${person.uid}`" class="admin-item user-item admin-item-reported">
-          <div class="admin-item-content">
-            <div class="user-head admin-item-title">
-              <h3 style="width: fit-content + 20px;">{{ person.name }}</h3>
+      <div v-else class="grid scrollable-list" style="gap: 12px">
+        <article v-for="person in filteredUsers" :key="`user-${person.uid}`" class="admin-item user-item">
+          <div class="user-item-header">
+            <div class="user-head">
+              <h3>{{ person.name }}</h3>
               <div class="user-badges">
                 <span v-if="person.isAdmin" class="badge admin">Admin</span>
                 <span v-if="person.isBlacklisted" class="badge danger">Blacklisted</span>
               </div>
             </div>
-          </div>
-
-          <div style="justify-content: flex-end; display: flex; align-items: center;">
             <RouterLink class="btn secondary btn-small" :to="`/seller/${person.uid}`">Abrir</RouterLink>
           </div>
 
-          <div>
-            <div
-              style="display: grid; grid-template-columns: 50% 50%; grid-template-rows: auto auto; gap: 6px; align-items: top; margin-bottom: 10px;">
-              <div>
-                <p class="muted" style="margin: 0 0 6px">UID: {{ person.uid || 'Não informado' }}</p>
-              </div>
-              <div>
-                <p class="muted" style="margin: 0 0 6px">Email: {{ person.email || 'Não informado' }}</p>
-              </div>
-            <div><p class="muted" style="margin: 0 0 6px">Cidade: {{ person.city || 'Não informado' }}</p></div>
-            <div><p class="muted" style="margin: 0 0 6px">Anúncios: {{ person.productCount }}</p></div>
+          <div class="user-item-body">
+            <div class="user-info-grid">
+              <p class="muted"><strong>UID:</strong> {{ person.uid || 'Não informado' }}</p>
+              <p class="muted"><strong>Email:</strong> {{ person.email || 'Não informado' }}</p>
+              <p class="muted"><strong>Cidade:</strong> {{ person.city || 'Não informado' }}</p>
+              <p class="muted"><strong>Anúncios:</strong> {{ person.productCount }}</p>
             </div>
             
-            <p v-if="person.blacklistReason" class="muted" style="margin: 0 0 6px"><strong>Motivo blacklist: {{
-              person.blacklistReason }}</strong></p>
+            <p v-if="person.blacklistReason" class="muted text-danger" style="margin-top: 8px;">
+              <strong>Motivo blacklist:</strong> {{ person.blacklistReason }}
+            </p>
           </div>
 
-          <div
-            style="gap:6px; display: flex; flex-direction: row; height: 100%; align-items: center; justify-content: flex-end;">
+          <div class="user-item-actions">
             <button v-if="!person.isAdmin && !person.isBlacklisted" class="btn danger btn-small" type="button"
-              :disabled="isActing" @click="banUser(person)">
-              Banir
-            </button>
-
+              :disabled="isActing" @click="banUser(person)">Banir</button>
             <button v-if="person.isBlacklisted" class="btn secondary btn-small" type="button" :disabled="isActing"
-              @click="unbanUser(person)">
-              Remover ban
-            </button>
-
+              @click="unbanUser(person)">Remover ban</button>
             <button v-if="!person.isAdmin" class="btn secondary btn-small" type="button" :disabled="isActing"
-              @click="deleteUserData(person)">
-              Excluir dados
-            </button>
+              @click="deleteUserData(person)">Excluir dados</button>
           </div>
         </article>
+        
+        <p v-if="filteredUsers.length === 0" class="muted">Nenhum usuário corresponde à busca.</p>
       </div>
     </article>
 
@@ -458,17 +469,40 @@ h3 {
 
 .user-item {
   background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.user-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .user-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.user-info-grid {
   display: grid;
-  align-items: left;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-.user-badges {
+.user-info-grid p {
+  margin: 0;
+}
+
+.user-item-actions {
   display: flex;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
 }
 
 .badge {

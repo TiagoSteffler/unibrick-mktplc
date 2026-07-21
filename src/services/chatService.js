@@ -116,11 +116,11 @@ function createDirectConversationBase(currentUser, otherUser, createdAt = nowIso
     participants: [currentUser.uid, otherUser.id],
     participantProfiles: {
       [currentUser.uid]: {
-        name: currentUser.displayName || 'Usuário',
+        name: currentUser.fullName || currentUser.displayName || 'Usuário',
         photoURL: '',
       },
       [otherUser.id]: {
-        name: otherUser.name || 'Vendedor',
+        name: otherUser.fullName || otherUser.name || 'Vendedor',
         photoURL: otherUser.photoURL || '',
       },
     },
