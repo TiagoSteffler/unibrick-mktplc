@@ -31,6 +31,9 @@ a {
   width: min(calc(100% - 32px), 1550px);
   margin: 0 auto;
   padding: 0 0px 24px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
 .topbar {

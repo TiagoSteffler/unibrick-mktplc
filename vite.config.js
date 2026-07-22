@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
       vue(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.svg'],
+        includeAssets: ['blue_logo_app.png'],
         manifest: {
           name: 'UniBrik',
           short_name: 'UniBrik',
@@ -21,15 +21,10 @@ export default defineConfig(({ mode }) => {
           display: 'standalone',
           icons: [
             {
-              src: 'favicon.svg',
-              sizes: '192x192',
-              type: 'image/svg+xml'
-            },
-            {
-              src: 'favicon.svg',
+              src: 'blue_logo_app.png',
               sizes: '512x512',
-              type: 'image/svg+xml'
-            }
+              type: 'image/png'
+            },
           ]
         }
       })

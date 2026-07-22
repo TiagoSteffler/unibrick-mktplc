@@ -14,6 +14,7 @@ import ChatView from '../views/ChatView.vue'
 import AdminPanelView from '../views/AdminPanelView.vue'
 import BannedView from '../views/BannedView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
+import SobreView from '../views/SobreView.vue'
 import {
   AUTH_ERROR_KIND_BLACKLISTED,
   AUTH_ERROR_KIND_DOMAIN_RESTRICTED,
@@ -90,6 +91,7 @@ const routes = [
     meta: { requiresAuth: true, requiresAdmin: true },
   },
   { path: '/banned', name: 'banned', component: BannedView },
+  { path: '/sobre', name: 'sobre', component: SobreView },
   { path: '/404', name: 'not-found', component: NotFoundView },
   { path: '/:pathMatch(.*)*', redirect: '/404' },
 ]

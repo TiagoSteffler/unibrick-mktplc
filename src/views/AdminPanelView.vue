@@ -278,7 +278,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="grid" style="gap: 16px">
+  <section class="grid admin-panel-layout" style="gap: 16px">
     <article class="card">
       <h1>Painel Administrativo</h1>
       <p class="muted">Gerencie moderacao de anúncios, blacklist de usuários e mensagens da página inicial.</p>
@@ -414,7 +414,7 @@ onMounted(() => {
           v-model="searchUserQuery" 
           type="search" 
           placeholder="Buscar usuário por nome..." 
-          style="max-width: 300px; border-radius: 12px;" 
+          style="max-width: 400px; border-radius: 12px;" 
         />
       </div>
 
@@ -583,18 +583,19 @@ h3 {
 }
 
 .admin-tabs {
-  display: flex;
-  gap: 8px;
-  border-bottom: 2px solid #e2e8f0;
-  margin-bottom: 16px;
-  overflow-x: auto;
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    border-bottom: 2px solid #e2e8f0;
+    margin-bottom: 16px;
+    justify-content: space-evenly;
 }
 
 .tab-btn {
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  padding: 10px 16px;
+  padding: 10px 2px;
   font-size: 14px;
   font-weight: 600;
   color: #64748b;
@@ -618,6 +619,18 @@ h3 {
 @media (max-width: 980px) {
   .two-columns {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-panel-layout {
+    margin: 0 -16px;
+  }
+
+  .admin-panel-layout > .card {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
   }
 }
 

@@ -189,5 +189,32 @@ function goToProtected(path) {
     <main class="page-wrap" :class="{ 'page-wrap-onboarding': hideNavigationChrome }">
       <RouterView />
     </main>
+
+    <footer v-if="!route.path.startsWith('/chat')" class="app-footer">
+      <p>UniBrik &copy; 2026 - <RouterLink to="/sobre" class="footer-link">Sobre</RouterLink></p>
+    </footer>
   </div>
 </template>
+
+<style scoped>
+.app-footer {
+  text-align: center;
+  padding: 16px;
+  margin-top: auto;
+  color: #64748b;
+  font-size: 14px;
+}
+.app-footer p {
+  margin: 0;
+}
+.footer-link {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .app-footer {
+    display: none;
+  }
+}
+</style>

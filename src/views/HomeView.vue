@@ -43,14 +43,18 @@ watch(currentUser, () => {
     <article v-if="hasVisibleMessage" class="card home-message-modal">
       <div class="home-message-head">
         <div class="home-message-content">
+                    <div style="display:grid; gap: 10px; grid-template-columns: auto 48px; align-items: center; justify-content: space-between;">
+
           <p class="home-message-chip">Mensagem da administração</p>
-          <h1>{{ homeMessage.title }}</h1>
+                      <button type="button" class="btn secondary home-message-close" @click="closeMessageBanner">
+              <svg style="width: 16px; height: 16px" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-icon lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button></div>
+          
+            <h1>{{ homeMessage.title }}</h1>
+
           <p class="home-message-text">{{ homeMessage.message }}</p>
         </div>
 
-        <button type="button" class="btn secondary home-message-close" @click="closeMessageBanner">
-          <svg style="width: 16px; height: 16px" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-icon lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-        </button>
       </div>
     </article>
 
@@ -124,6 +128,7 @@ h2 {
 .home-message-content {
   display: grid;
   gap: 8px;
+  width: 100%;
 }
 
 .home-message-chip {
@@ -144,7 +149,11 @@ h2 {
 
 .home-message-close {
 border-radius: 999px;
-aspect-ratio: 1/1;
+height: 36px;
+padding: 6px;
+line-height: 0.5;
+width: 42px;
+
 }
 
 .home-products-section {
@@ -154,10 +163,6 @@ aspect-ratio: 1/1;
 @media (max-width: 640px) {
   .home-message-head {
     flex-direction: column;
-  }
-
-  .home-message-close {
-    width: 100%;
   }
 }
 </style>
