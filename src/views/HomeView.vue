@@ -49,7 +49,7 @@ watch(currentUser, () => {
         </div>
 
         <button type="button" class="btn secondary home-message-close" @click="closeMessageBanner">
-          Fechar
+          <svg style="width: 16px; height: 16px" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-icon lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
         </button>
       </div>
     </article>
@@ -143,7 +143,8 @@ h2 {
 }
 
 .home-message-close {
-  min-width: 84px;
+border-radius: 999px;
+aspect-ratio: 1/1;
 }
 
 .home-products-section {

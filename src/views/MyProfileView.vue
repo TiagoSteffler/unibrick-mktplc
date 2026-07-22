@@ -24,6 +24,20 @@ const showDeleteAccountModal = ref(false)
 const accountActionError = ref('')
 const hasConfiguredProfile = computed(() => (isLoading.value ? true : isUserProfileComplete(profile.value)))
 const highlightedMyProducts = computed(() => myProducts.value.slice(0, 3))
+const profileSectionStyle = computed(() => {
+  const isMobileMenuVisible = () => {
+    if (typeof document === 'undefined') return false
+    const element = document.querySelector('.mobile-bottom-menu[aria-label="Navegacao mobile"]')
+    if (!element) return false
+    const style = window.getComputedStyle(element)
+    return style.display !== 'none' && style.visibility !== 'hidden'
+  }
+
+  return {
+    gap: '16px',
+    margin: isMobileMenuVisible() ? '0px -16px' : '0px 0px',
+  }
+})
 const accountDeletionEffects = [
   'seus dados de perfil',
   'seus anúncios',
@@ -115,15 +129,15 @@ watch(
 </script>
 
 <template>
-  <section class="grid loading-section" style="gap: 16px" v-if="user">
+  <section class="grid loading-section" :style="profileSectionStyle" v-if="user">
     <div v-if="isLoading" class="section-loading-overlay" aria-live="polite">
       <span class="spinner" aria-hidden="true"></span>
       <p>Carregando perfil...</p>
     </div>
 
-    <article class="card">
+    <article class="card profile-card">
       <div class="my-profile-head">
-        <div class="my-avatar-container">
+        <div class="my-avatar-container" style="align-items: center; justify-content: center">
           <img
             v-if="profile?.photoURL"
             :src="profile.photoURL"
@@ -154,6 +168,7 @@ watch(
 
           <div class="my-profile-actions">
             <RouterLink v-if="hasConfiguredProfile" to="/profile/edit" class="btn secondary">
+              <svg style="width: 16px; height: 16px" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pencil-icon lucide-pencil"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
               Editar perfil
             </RouterLink>
             <RouterLink v-else to="/profile/setup" class="btn secondary">Completar cadastro</RouterLink>
@@ -164,9 +179,12 @@ watch(
               @click="handleDeleteAccount"
               :disabled="isDeletingAccount"
             >
+              <svg style="width: 16px; height: 16px" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2-icon lucide-trash-2"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               {{ isDeletingAccount ? 'Excluindo conta...' : 'Excluir conta' }}
             </button>
-            <button class="btn secondary" type="button" @click="handleLogout">Sair</button>
+            <button class="btn secondary" type="button" @click="handleLogout">
+              <svg style="width: 16px; height: 16px" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-log-out-icon lucide-log-out"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg>
+              Sair</button>
           </div>
 
           <p v-if="accountActionError" class="account-error">
@@ -176,10 +194,13 @@ watch(
       </div>
    </article>
 
-    <article class="card">
+    <article class="card profile-card">
       <div class="my-products-head">
         <h2>Meus anúncios</h2>
-        <RouterLink to="/my/products" class="btn secondary">Mais Detalhes</RouterLink>
+        <RouterLink to="/my/products" class="btn secondary">
+          <svg style="width: 18px; height: 18px;" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-move-up-right-icon lucide-move-up-right"><path d="M13 5H19V11"/><path d="M19 5L5 19"/></svg>
+
+          Mais Detalhes</RouterLink>
       </div>
 
       <p v-if="!myProducts.length" class="muted" style="margin: 10px 18px">
@@ -237,21 +258,21 @@ p {
 }
 
 .my-profile-head {
-  padding: 16px 30px;
+  padding: 8px;
   display: grid;
   grid-template-columns: 1fr minmax(0, 4fr);
   gap: 30px;
   align-items: start;
-  height:auto;
-  
+  height: auto;
 }
 
 .my-avatar-container {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
   aspect-ratio: 1;
+  height: 30vh;
+  margin: 0 auto;
 }
 
 .my-avatar {
@@ -304,7 +325,7 @@ p {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-  margin: 18px;
+  margin-bottom: 18px;
   font-size: 18px;
 }
 
@@ -331,10 +352,17 @@ p {
 @media (max-width: 640px) {
   .my-profile-head {
     grid-template-columns: 1fr;
+    padding: 0;
   }
 
   .my-products-head {
     flex-wrap: wrap;
+  }
+  
+  .profile-card {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
   }
 }
 </style>

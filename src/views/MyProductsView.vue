@@ -76,7 +76,7 @@ onMounted(() => {
   <section class="grid" style="gap: 14px">
     <div class="card">
       <div class="header-row">
-        <h1>Meus Produtos</h1>
+        <h2 style="margin: 0px">Meus Anúncios</h2>
         
       </div>
       <RouterLink class="btn" style="width: 100%; margin-top: 12px;" to="/product/new">

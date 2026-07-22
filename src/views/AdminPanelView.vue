@@ -12,6 +12,7 @@ import {
   getHomeMessage,
   getPendingProductsForAdmin,
   getReportedProductsForAdmin,
+  getRejectedProductsForAdmin,
   getUsersForAdmin,
   rejectProductByAdmin,
   saveHomeMessageByAdmin,
@@ -23,19 +24,30 @@ const user = computed(() => authState.value)
 
 const pendingProducts = ref([])
 const reportedProducts = ref([])
+const rejectedProducts = ref([])
 const users = ref([])
 const blacklistedUsers = ref([])
 const searchUserQuery = ref('')
 
+const activeProductTab = ref('pending') // 'pending', 'reported', 'rejected'
+const activeUserTab = ref('active') // 'active', 'banned'
+
+const activeUsers = computed(() => {
+  const bannedIds = new Set(blacklistedUsers.value.map(b => b.uid || b.email))
+  return users.value.filter(u => !bannedIds.has(u.uid) && !bannedIds.has(u.email))
+})
+
 const filteredUsers = computed(() => {
+  const baseList = activeUserTab.value === 'active' ? activeUsers.value : blacklistedUsers.value
+
   if (!searchUserQuery.value.trim()) {
-    return users.value
+    return baseList
   }
   
   const queryWords = searchUserQuery.value.toLowerCase().split(/\s+/)
   
-  return users.value.filter(user => {
-    const nameLower = String(user.name || '').toLowerCase()
+  return baseList.filter(u => {
+    const nameLower = String(u.name || u.email || '').toLowerCase()
     // Match any subword of the user's name
     return queryWords.every(word => nameLower.includes(word))
   })
@@ -106,9 +118,10 @@ async function loadAdminData() {
   isLoading.value = true
 
   try {
-    const [pending, reported, usersList, blacklist, homeMessage] = await Promise.all([
+    const [pending, reported, rejected, usersList, blacklist, homeMessage] = await Promise.all([
       getPendingProductsForAdmin(user.value),
       getReportedProductsForAdmin(user.value),
+      getRejectedProductsForAdmin(user.value),
       getUsersForAdmin(user.value),
       getBlacklistedUsers(user.value),
       getHomeMessage(),
@@ -116,6 +129,7 @@ async function loadAdminData() {
 
     pendingProducts.value = pending
     reportedProducts.value = reported
+    rejectedProducts.value = rejected
     users.value = usersList
     blacklistedUsers.value = blacklist
     announcementForm.title = String(homeMessage?.title || '')
@@ -295,47 +309,56 @@ onMounted(() => {
       </div>
     </article>
 
-    <section class="grid two-columns" style="gap: 16px">
-      <article class="card">
-        <h2>Anúncios Pendentes</h2>
-        <p class="muted">{{ pendingProducts.length }} anúncio(s) aguardando aprovação.</p>
+    <article class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+        <div>
+          <h2>Gestão de Anúncios</h2>
+          <p class="muted">Aprove, rejeite ou exclua anúncios da plataforma.</p>
+        </div>
+      </div>
+      
+      <div class="admin-tabs">
+        <button 
+          :class="['tab-btn', { active: activeProductTab === 'pending' }]"
+          @click="activeProductTab = 'pending'"
+        >Pendentes ({{ pendingProducts.length }})</button>
+        <button 
+          :class="['tab-btn', { active: activeProductTab === 'reported' }]"
+          @click="activeProductTab = 'reported'"
+        >Reportados ({{ reportedProducts.length }})</button>
+        <button 
+          :class="['tab-btn', { active: activeProductTab === 'rejected' }]"
+          @click="activeProductTab = 'rejected'"
+        >Rejeitados ({{ rejectedProducts.length }})</button>
+      </div>
 
-        <div v-if="isLoading" class="muted">Carregando...</div>
+      <div v-if="isLoading" class="muted">Carregando anúncios...</div>
 
-        <div v-else-if="!pendingProducts.length" class="muted">Não há anúncios pendentes.</div>
-
+      <!-- PENDING -->
+      <div v-else-if="activeProductTab === 'pending'">
+        <div v-if="!pendingProducts.length" class="muted">Não há anúncios pendentes.</div>
         <div v-else class="grid scrollable-list" style="gap: 12px">
           <article v-for="product in pendingProducts" :key="`pending-${product.id}`" class="admin-item">
             <div class="admin-item-head">
               <h3>{{ product.title }}</h3>
               <RouterLink class="btn secondary" :to="`/product/${product.id}`">Abrir</RouterLink>
             </div>
-            <p class="muted">{{ formatPrice(product.price) }} | {{ product.category }} | {{
-              getModerationStatusLabel(product) }}</p>
+            <p class="muted">{{ formatPrice(product.price) }} | {{ product.category }} | {{ getModerationStatusLabel(product) }}</p>
             <p class="muted">Vendedor: {{ product.sellerName }}</p>
             <div class="action-row" style="">
-              <button class="btn" type="button" :disabled="isActing"
-                @click="approveProduct(product.id)">Aprovar</button>
-              <button class="btn secondary" type="button" :disabled="isActing" @click="rejectProduct(product.id)">Marcar
-                inválido</button>
-              <button class="btn danger" type="button" :disabled="isActing"
-                @click="deleteListing(product.id)">Excluir</button>
+              <button class="btn" type="button" :disabled="isActing" @click="approveProduct(product.id)">Aprovar</button>
+              <button class="btn secondary" type="button" :disabled="isActing" @click="rejectProduct(product.id)">Marcar inválido</button>
+              <button class="btn danger" type="button" :disabled="isActing" @click="deleteListing(product.id)">Excluir</button>
             </div>
           </article>
         </div>
-      </article>
+      </div>
 
-      <article class="card">
-        <h2>Anúncios Reportados</h2>
-        <p class="muted">{{ reportedProducts.length }} anúncio(s) reportado(s) para revisão.</p>
-
-        <div v-if="isLoading" class="muted">Carregando...</div>
-
-        <div v-else-if="!reportedProducts.length" class="muted">Não há anúncios reportados.</div>
-
+      <!-- REPORTED -->
+      <div v-else-if="activeProductTab === 'reported'">
+        <div v-if="!reportedProducts.length" class="muted">Não há anúncios reportados.</div>
         <div v-else class="grid scrollable-list" style="gap: 12px">
-          <article v-for="product in reportedProducts" :key="`reported-${product.id}`"
-            class="admin-item admin-item-reported">
+          <article v-for="product in reportedProducts" :key="`reported-${product.id}`" class="admin-item admin-item-reported">
             <div class="admin-item-content">
               <div class="admin-item-title">
                 <h3>{{ product.title }}</h3>
@@ -346,25 +369,40 @@ onMounted(() => {
             </div>
             <div>
               <div class="admin-item-content">
-                <p class="muted" style="margin: 0px 0px 6px">{{ formatPrice(product.price) }} | {{ product.category }}
-                </p>
+                <p class="muted" style="margin: 0px 0px 6px">{{ formatPrice(product.price) }} | {{ product.category }}</p>
                 <p class="muted" style="margin: 0px 0px 6px">Motivo: {{ product.reportReason || 'Não informado' }}</p>
                 <p class="muted" style="margin: 0px 0px 6px">{{ formatDate(product.reportedAt) }}</p>
               </div>
             </div>
             <div style="gap:6px; display: flex; flex-direction: row; height: 100%; align-items: center;">
-              <button class="btn btn-small" type="button" :disabled="isActing"
-                @click="approveProduct(product.id)">Aprovar</button>
-              <button class="btn secondary btn-small" type="button" :disabled="isActing"
-                @click="rejectProduct(product.id)">Invalidar</button>
-              <button class="btn danger btn-small" type="button" :disabled="isActing"
-                @click="deleteListing(product.id)">Excluir</button>
+              <button class="btn btn-small" type="button" :disabled="isActing" @click="approveProduct(product.id)">Aprovar</button>
+              <button class="btn secondary btn-small" type="button" :disabled="isActing" @click="rejectProduct(product.id)">Invalidar</button>
+              <button class="btn danger btn-small" type="button" :disabled="isActing" @click="deleteListing(product.id)">Excluir</button>
             </div>
           </article>
-
         </div>
-      </article>
-    </section>
+      </div>
+
+      <!-- REJECTED -->
+      <div v-else-if="activeProductTab === 'rejected'">
+        <div v-if="!rejectedProducts.length" class="muted">Não há anúncios rejeitados.</div>
+        <div v-else class="grid scrollable-list" style="gap: 12px">
+          <article v-for="product in rejectedProducts" :key="`rejected-${product.id}`" class="admin-item">
+            <div class="admin-item-head">
+              <h3>{{ product.title }}</h3>
+              <RouterLink class="btn secondary" :to="`/product/${product.id}`">Abrir</RouterLink>
+            </div>
+            <p class="muted">{{ formatPrice(product.price) }} | {{ product.category }}</p>
+            <p class="muted text-danger" style="margin-top: 4px; font-weight: 500;">Motivo: {{ product.moderationReason || 'Não informado' }}</p>
+            <p class="muted" style="margin-bottom: 8px;">Vendedor: {{ product.sellerName }}</p>
+            <div class="action-row" style="">
+              <button class="btn" type="button" :disabled="isActing" @click="approveProduct(product.id)">Aprovar (Desfazer)</button>
+              <button class="btn danger" type="button" :disabled="isActing" @click="deleteListing(product.id)">Excluir Permanentemente</button>
+            </div>
+          </article>
+        </div>
+      </div>
+    </article>
 
     <article class="card grid" style="gap: 12px">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
@@ -378,6 +416,17 @@ onMounted(() => {
           placeholder="Buscar usuário por nome..." 
           style="max-width: 300px; border-radius: 12px;" 
         />
+      </div>
+
+      <div class="admin-tabs">
+        <button 
+          :class="['tab-btn', { active: activeUserTab === 'active' }]"
+          @click="activeUserTab = 'active'"
+        >Ativos ({{ activeUsers.length }})</button>
+        <button 
+          :class="['tab-btn', { active: activeUserTab === 'banned' }]"
+          @click="activeUserTab = 'banned'"
+        >Banidos ({{ blacklistedUsers.length }})</button>
       </div>
 
       <div v-if="isLoading" class="muted">Carregando usuários...</div>
@@ -531,6 +580,39 @@ h3 {
   display: grid;
   gap: 6px;
   color: #334155;
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 2px solid #e2e8f0;
+  margin-bottom: 16px;
+  overflow-x: auto;
+}
+
+.tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  white-space: nowrap;
+  margin-bottom: -2px;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  color: #334155;
+  background: #f1f5f9;
+  border-radius: 6px 6px 0 0;
+}
+
+.tab-btn.active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
 }
 
 @media (max-width: 980px) {

@@ -32,9 +32,8 @@ onMounted(() => {
 <template>
   <section class="grid" style="gap: 14px">
     <article class="card">
-      <h1>Produtos Favoritados</h1>
-      <p class="muted">Itens salvos para acompanhar depois.</p>
-    </article>
+      <h2 style="margin: 0px">Meus Favoritos</h2>
+      </article>
 
     <section class="loading-section favorites-products-section">
       <div v-if="isLoading" class="section-loading-overlay" aria-live="polite">
@@ -48,9 +47,6 @@ onMounted(() => {
 
       <article v-else class="card muted">
         Nenhum favorito salvo ainda.
-        <button class="btn secondary" style="margin-left: 10px" type="button" @click="goToProducts">
-          Ver produtos
-        </button>
       </article>
     </section>
   </section>

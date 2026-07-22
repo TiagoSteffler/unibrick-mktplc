@@ -42,7 +42,7 @@ onMounted(() => {
       <p>Carregando dados do vendedor...</p>
     </div>
 
-    <article class="card" v-if="seller">
+    <article class="card profile-card" v-if="seller">
       <div class="seller-profile-head">
         <div class="seller-avatar-container">
           <img
@@ -98,20 +98,22 @@ p {
 }
 
 .seller-profile-head {
-  padding: 16px 30px;
+  padding: 8px;
   display: grid;
   grid-template-columns: 1fr minmax(0, 4fr);
   gap: 30px;
   align-items: start;
-  height:auto;
+  height: auto;
 }
 
 .seller-avatar-container {
   display: flex;
   align-items: center;
   justify-content: center;
-    height: 100%;
+  height: 100%;
   aspect-ratio: 1;
+  max-height: 30vh;
+  margin: 0 auto;
 }
 
 .seller-avatar {
@@ -161,6 +163,14 @@ p {
 @media (max-width: 640px) {
   .seller-profile-head {
     grid-template-columns: 1fr;
+    padding: 0;
+  }
+  
+  .profile-card {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    margin: 0 -16px;
   }
 }
 </style>

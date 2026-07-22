@@ -2441,6 +2441,10 @@ export async function getReportedProductsForAdmin(adminUser) {
   return getProductsForModeration(adminUser, { status: 'reported' })
 }
 
+export async function getRejectedProductsForAdmin(adminUser) {
+  return getProductsForModeration(adminUser, { status: 'rejected' })
+}
+
 export async function getBlacklistedUsers(adminUser) {
   await assertAdminUser(adminUser)
 

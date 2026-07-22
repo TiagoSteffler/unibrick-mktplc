@@ -547,7 +547,7 @@ watch(
     </div>
 
     <aside class="card chat-sidebar">
-      <h1>Conversas</h1>
+      <h2>Conversas</h2>
 
       <p v-if="chatError" class="chat-error">{{ chatError }}</p>
 
@@ -581,14 +581,14 @@ watch(
 
     <section class="card chat-main" v-if="hasConversations && activeConversation">
       <header class="chat-main-header">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; width: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%;">
           <div style="display: flex; align-items: center; gap: 10px;">
             <button type="button" class="btn btn-sm back-to-list-btn" @click="activeConversationId = ''" aria-label="Voltar">
               <svg style="width: 24px; height: 24px;" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left-icon lucide-arrow-left"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
             </button>
             <div>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <h2>{{ truncateName(activePeer?.name || 'Conversa', 15) }}</h2>
+                <h3 style="margin: 0;">{{ truncateName(activePeer?.name || 'Conversa', 15) }}</h3>
                 <RouterLink v-if="activePeer && activePeer.id" :to="`/seller/${activePeer.id}`" class="btn_alt" title="Ver perfil">
                   <svg style="width: 20px; height: 20px;" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-move-up-right-icon lucide-move-up-right"><path d="M13 5H19V11"/><path d="M19 5L5 19"/></svg>                </RouterLink>
               </div>
@@ -714,9 +714,10 @@ watch(
 
 .chat-sidebar {
   min-height: 80vh;
+  padding: 18px;
 }
 
-.chat-sidebar h1 {
+.chat-sidebar h2 {
   margin: 0;
 }
 
@@ -792,6 +793,10 @@ watch(
 
 .chat-main-header h2 {
   margin: 0;
+}
+
+.chat-main-header {
+  padding: 0px 12px;
 }
 
 .chat-main-header p {
@@ -895,6 +900,7 @@ watch(
 .chat-composer {
   display: grid;
   gap: 8px;
+  padding: 0px 12px;
 }
 
 .chat-pending-attachment {
@@ -915,6 +921,7 @@ watch(
 .chat-composer-form textarea {
   min-height: 52px;
   resize: vertical;
+  max-height: 200px;
 }
 
 .chat-empty-state {
@@ -937,6 +944,14 @@ watch(
     grid-template-columns: 1fr;
     height: calc(100vh - 200px);
     overflow: hidden;
+    margin: 0 -16px;
+  }
+
+  .chat-main, .chat-sidebar, .chat-empty-state {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    padding: 16px 12px;
   }
 
   .chat-sidebar {
