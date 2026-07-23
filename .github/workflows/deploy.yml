@@ -41,6 +41,7 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
           VITE_ALLOWED_LOGIN_DOMAIN: ${{ secrets.VITE_ALLOWED_LOGIN_DOMAIN }}
+          VITE_RECAPTCHA_SITE_KEY: ${{ secrets.VITE_RECAPTCHA_SITE_KEY }}
         run: |
           set -e
           required=(
@@ -51,6 +52,7 @@ jobs:
             VITE_FIREBASE_MESSAGING_SENDER_ID
             VITE_FIREBASE_APP_ID
             VITE_ALLOWED_LOGIN_DOMAIN
+            VITE_RECAPTCHA_SITE_KEY
           )
 
           for name in "${required[@]}"; do
@@ -72,6 +74,7 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
           VITE_ALLOWED_LOGIN_DOMAIN: ${{ secrets.VITE_ALLOWED_LOGIN_DOMAIN }}
+          VITE_RECAPTCHA_SITE_KEY: ${{ secrets.VITE_RECAPTCHA_SITE_KEY }}
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

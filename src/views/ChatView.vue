@@ -270,6 +270,10 @@ async function handleProductChatIntent() {
   const sellerId = typeof route.query.sellerId === 'string' ? route.query.sellerId : ''
   const productId = typeof route.query.productId === 'string' ? route.query.productId : ''
 
+  if (!sellerId) {
+    return
+  }
+
   try {
     let product = null
 
