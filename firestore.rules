@@ -1,0 +1,298 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedInRaw() {
+      return request.auth != null
+        && request.auth.token.email is string;
+    }
+
+    function hasAcademicEmailDomain() {
+      return isSignedInRaw()
+        && request.auth.token.email.matches('.*@(acad\\.ufsm\\.br|inf\\.ufsm\\.br|ufsm\\.br)$');
+    }
+
+    function hasAdminClaim() {
+      return isSignedInRaw()
+        && (
+          request.auth.token.admin == true
+          || request.auth.token.role == 'admin'
+        );
+    }
+
+    function hasAdminRecordByUid() {
+      return isSignedInRaw()
+        && exists(/databases/$(database)/documents/admin_users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admin_users/$(request.auth.uid)).data.active != false;
+    }
+
+    function hasAdminRecordByEmailDocId() {
+      return isSignedInRaw()
+        && exists(/databases/$(database)/documents/admin_users/$(request.auth.token.email))
+        && get(/databases/$(database)/documents/admin_users/$(request.auth.token.email)).data.active != false;
+    }
+
+    function isAdmin() {
+      return isSignedInRaw()
+        && request.auth.token.email.matches('.*@gmail\\.com$')
+        && (hasAdminClaim() || hasAdminRecordByUid() || hasAdminRecordByEmailDocId());
+    }
+
+    function isBlacklisted() {
+      return isSignedInRaw()
+        && (
+          (
+            exists(/databases/$(database)/documents/blacklist/$(request.auth.uid))
+            && get(/databases/$(database)/documents/blacklist/$(request.auth.uid)).data.active != false
+          )
+          || (
+            exists(/databases/$(database)/documents/blacklist/$(request.auth.token.email))
+            && get(/databases/$(database)/documents/blacklist/$(request.auth.token.email)).data.active != false
+          )
+        );
+    }
+
+    function isSignedIn() {
+      return isSignedInRaw()
+        && !isBlacklisted()
+        && (hasAcademicEmailDomain() || isAdmin());
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function validProductPayload(data) {
+      return data.price is number
+        && data.price >= 0
+        && data.price <= 9999.99
+        && data.photos is list
+        && data.photos.size() >= 1
+        && data.photos.size() <= 5
+        && data.title is string
+        && data.title.size() >= 1
+        && data.title.size() <= 120
+        && data.description is string
+        && data.description.size() <= 1000;
+    }
+
+    match /products/{productId} {
+      function isValidReportUpdate() {
+        return request.auth.uid != resource.data.sellerId
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+            'moderationStatus',
+            'moderationReason',
+            'moderationUpdatedAt',
+            'moderationUpdatedByUid',
+            'moderationUpdatedByEmail',
+            'reportReason',
+            'reportedAt',
+            'reportedByUid',
+            'reportedByEmail'
+          ])
+          && request.resource.data.moderationStatus == 'reported'
+          && request.resource.data.moderationReason == ''
+          && request.resource.data.moderationUpdatedByUid == ''
+          && request.resource.data.moderationUpdatedByEmail == ''
+          && request.resource.data.reportReason is string
+          && request.resource.data.reportReason.size() > 0
+          && request.resource.data.reportReason.size() <= 400
+          && request.resource.data.reportedAt is string
+          && request.resource.data.reportedAt.size() > 0
+          && request.resource.data.reportedByUid == request.auth.uid
+          && request.resource.data.reportedByEmail is string
+          && request.resource.data.reportedByEmail.size() > 0;
+      }
+
+      // Leitura: aprovados e reportados sao publicos.
+      // Pendentes/rejeitados so para dono ou admin.
+      allow get: if resource.data.moderationStatus in ['approved', 'reported']
+        || (isSignedIn() && resource.data.sellerId == request.auth.uid)
+        || isAdmin();
+
+      // Para list (queries), o Firestore exige que a query garanta
+      // que todos os resultados passem na regra.
+      // Queries publicas DEVEM incluir where('moderationStatus', 'in', ['approved','reported'])
+      // ou where('moderationStatus', '==', 'approved').
+      // Queries do dono DEVEM incluir where('sellerId', '==', request.auth.uid).
+      // Queries de admin sao irrestritas.
+      allow list: if resource.data.moderationStatus in ['approved', 'reported']
+        || (isSignedIn() && resource.data.sellerId == request.auth.uid)
+        || isAdmin();
+
+      allow create: if isSignedIn()
+        && request.resource.data.sellerId == request.auth.uid
+        && validProductPayload(request.resource.data)
+        && (
+          (
+            isAdmin()
+            && request.resource.data.moderationStatus == 'approved'
+            && request.resource.data.isAdminPost == true
+          )
+          || (
+            !isAdmin()
+            && request.resource.data.moderationStatus == 'pending'
+            && request.resource.data.isAdminPost == false
+          )
+        );
+
+      allow update: if isSignedIn()
+        && request.resource.data.sellerId == resource.data.sellerId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && validProductPayload(request.resource.data)
+        && (
+          isAdmin()
+          || (
+            resource.data.sellerId == request.auth.uid
+            && request.resource.data.moderationStatus == 'pending'
+            && request.resource.data.isAdminPost == false
+          )
+          || isValidReportUpdate()
+        );
+
+      allow delete: if isSignedIn()
+        && (isAdmin() || resource.data.sellerId == request.auth.uid);
+    }
+
+    match /user_profiles/{userId} {
+      allow read: if true;
+      allow create, update, delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+    }
+
+    match /admin_users/{adminUserId} {
+      // Leitura do proprio doc para validar sessao admin no frontend.
+      allow get: if isSignedIn() && (request.auth.uid == adminUserId || isAdmin());
+      allow list: if isAdmin();
+
+      // Recomendado: gerir admin_users apenas via Console/CLI/Admin SDK.
+      allow write: if false;
+    }
+
+    match /blacklist/{entryId} {
+      allow get: if isSignedIn()
+        && (
+          isAdmin()
+          || request.auth.uid == entryId
+          || request.auth.token.email == entryId
+        );
+
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /home_messages/{messageId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /system_metadata/{docId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /chat_conversations/{conversationId} {
+      function isChatUser() {
+        return isSignedInRaw() && !isBlacklisted();
+      }
+
+      function isParticipantUidNotBlacklisted(uid) {
+        return !(exists(/databases/$(database)/documents/blacklist/$(uid))
+          && get(/databases/$(database)/documents/blacklist/$(uid)).data.active != false);
+      }
+
+      function hasTwoParticipantsInCreate() {
+        return request.resource.data.participants is list
+          && request.resource.data.participants.size() == 2;
+      }
+
+      function requesterIsParticipantInCreate() {
+        return request.auth.uid in request.resource.data.participants;
+      }
+
+      function allParticipantsValidInCreate() {
+        return hasTwoParticipantsInCreate()
+          && isParticipantUidNotBlacklisted(request.resource.data.participants[0])
+          && isParticipantUidNotBlacklisted(request.resource.data.participants[1]);
+      }
+
+      function hasValidTopicProductForCreate() {
+        return !(request.resource.data.topicProduct is map)
+          || (
+            request.resource.data.topicProduct.productId is string
+            && request.resource.data.topicProduct.productId.size() > 0
+            && request.resource.data.topicProduct.buyerId == request.auth.uid
+            && exists(/databases/$(database)/documents/products/$(request.resource.data.topicProduct.productId))
+            && get(/databases/$(database)/documents/products/$(request.resource.data.topicProduct.productId)).data.moderationStatus == 'approved'
+            && get(/databases/$(database)/documents/products/$(request.resource.data.topicProduct.productId)).data.sellerId
+              in request.resource.data.participants
+          );
+      }
+
+      function isParticipant() {
+        return isChatUser() && (resource == null || request.auth.uid in resource.data.participants);
+      }
+
+      function isParticipantInNewData() {
+        return isChatUser() && request.auth.uid in request.resource.data.participants;
+      }
+
+      function isParticipantInConversationDoc() {
+        return isChatUser()
+          && exists(/databases/$(database)/documents/chat_conversations/$(conversationId))
+          && request.auth.uid in get(/databases/$(database)/documents/chat_conversations/$(conversationId)).data.participants;
+      }
+
+      function isValidMessagePayload() {
+        return request.resource.data.senderId is string
+          && request.resource.data.senderName is string
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 2000
+          && request.resource.data.createdAt is string;
+      }
+
+      allow read: if isParticipant();
+
+      allow create: if isChatUser()
+        && requesterIsParticipantInCreate()
+        && allParticipantsValidInCreate()
+        && hasValidTopicProductForCreate();
+
+      allow update: if isParticipant()
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'participants',
+          'unreadCounts',
+          'updatedAt',
+          'lastMessagePreview',
+          'participantProfiles',
+          'topicProduct',
+          'clearedAt'
+        ])
+        && (
+          isParticipantInNewData()
+          || !(request.auth.uid in request.resource.data.participants)
+        );
+
+      allow delete: if isParticipant() && resource.data.participants.size() <= 1;
+
+      match /messages/{messageId} {
+        allow read: if isParticipantInConversationDoc();
+
+        // Cliente so pode enviar mensagem em nome do proprio usuario autenticado.
+        // Mensagens "de sistema" devem ser geradas por Cloud Functions/Admin SDK ou pelo Administrador.
+        // Limite de texto: 2000 caracteres.
+        allow create: if (isParticipantInConversationDoc()
+          && request.resource.data.senderId == request.auth.uid
+          && isParticipantUidNotBlacklisted(request.auth.uid)
+          && isValidMessagePayload())
+          || isAdmin();
+
+        allow update, delete: if false;
+      }
+    }
+
+    match /unibrik_broadcasts/{broadcastId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+  }
+}

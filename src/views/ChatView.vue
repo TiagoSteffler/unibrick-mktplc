@@ -681,6 +681,7 @@ watch(
           <textarea
             v-model="draftMessage"
             rows="2"
+            maxlength="300"
             placeholder="Digite sua mensagem"
             :disabled="isReadOnlyConversation || isSending"
             @keydown="handleKeydown"

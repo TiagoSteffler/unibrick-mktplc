@@ -311,7 +311,7 @@ onMounted(() => {
         <div class="stack-md">
         <label class="field">
           <span>Título do anúncio</span>
-          <input v-model="form.title" type="text" required placeholder="Ex.: Notebook Acer" />
+          <input v-model="form.title" type="text" required maxlength="50" placeholder="Ex.: Notebook Acer" />
         </label>
 
         <label class="field">
@@ -319,6 +319,7 @@ onMounted(() => {
           <textarea
             v-model="form.description"
             rows="6"
+            maxlength="1000"
             required
             placeholder="Descreva estado, itens inclusos e detalhes relevantes"
           ></textarea>

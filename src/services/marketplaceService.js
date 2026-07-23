@@ -17,6 +17,7 @@ import { db, isFirebaseConfigured, storage } from '../firebase/config'
 import { getCachedCollection, getCachedDoc, setCachedCollection, setCachedDoc, invalidateCache, getCacheTimestamp, setCacheTimestamp } from './cacheService'
 import { markProductConversationsAsDeleted, sendSystemMessageToUser, ensureUniBrikConversation } from './chatService'
 import { SYSTEM_MESSAGES } from '../config/messages'
+import { enforceRateLimit, recordOperation } from './rateLimitService'
 
 const EXTRA_PRODUCTS_KEY = 'marketplace_extra_products'
 const USER_PROFILE_KEY = 'marketplace_user_profiles'
@@ -896,25 +897,40 @@ async function updateRemoteCacheTimestamp() {
   }
 }
 
-async function getAllProductsFirestore() {
+async function getAllProductsFirestore(options = {}) {
+  const { adminMode = false, ownerModeUid = null } = options
+
   if (!isFirebaseConfigured || !db) {
     return getAllProducts()
   }
 
-  const cached = getCachedCollection(PRODUCTS_COLLECTION)
-  const localTimestamp = getCacheTimestamp(PRODUCTS_COLLECTION)
-  const remoteTimestamp = await getRemoteCacheTimestamp()
+  // Se não houver filtro, tentamos o cache primeiro para a coleção global.
+  // ownerModeUid não usa o cache global pois os resultados seriam parciais.
+  if (!ownerModeUid) {
+    const cached = getCachedCollection(PRODUCTS_COLLECTION)
+    const localTimestamp = getCacheTimestamp(PRODUCTS_COLLECTION)
+    const remoteTimestamp = await getRemoteCacheTimestamp()
 
-  if (remoteTimestamp && localTimestamp) {
-    const isOutdated = new Date(remoteTimestamp).getTime() > new Date(localTimestamp).getTime()
-    if (!isOutdated && cached && Array.isArray(cached) && cached.length > 0) {
+    if (remoteTimestamp && localTimestamp) {
+      const isOutdated = new Date(remoteTimestamp).getTime() > new Date(localTimestamp).getTime()
+      if (!isOutdated && cached && Array.isArray(cached) && cached.length > 0) {
+        return cached.map(normalizeProduct)
+      }
+    } else if (!remoteTimestamp && cached && Array.isArray(cached) && cached.length > 0) {
       return cached.map(normalizeProduct)
     }
-  } else if (!remoteTimestamp && cached && Array.isArray(cached) && cached.length > 0) {
-    return cached.map(normalizeProduct)
   }
 
-  const snapshot = await getDocs(collection(db, PRODUCTS_COLLECTION))
+  let snapshot
+  if (adminMode) {
+    snapshot = await getDocs(collection(db, PRODUCTS_COLLECTION))
+  } else if (ownerModeUid) {
+    const q = query(collection(db, PRODUCTS_COLLECTION), where('sellerId', '==', ownerModeUid))
+    snapshot = await getDocs(q)
+  } else {
+    const q = query(collection(db, PRODUCTS_COLLECTION), where('moderationStatus', 'in', ['approved', 'reported']))
+    snapshot = await getDocs(q)
+  }
 
   const products = snapshot.docs.map((item) => {
     const data = item.data()
@@ -924,14 +940,18 @@ async function getAllProductsFirestore() {
     })
   })
 
-  setCachedCollection(PRODUCTS_COLLECTION, products)
-  products.forEach(p => setCachedProduct(p.id, p))
+  // Só populamos o cache global se não for uma query restrita a owner
+  if (!ownerModeUid) {
+    setCachedCollection(PRODUCTS_COLLECTION, products)
+    products.forEach(p => setCachedProduct(p.id, p))
 
-  if (remoteTimestamp) {
-    setCacheTimestamp(PRODUCTS_COLLECTION, remoteTimestamp)
-  } else {
-    await updateRemoteCacheTimestamp()
-    setCacheTimestamp(PRODUCTS_COLLECTION, new Date().toISOString())
+    const remoteTimestamp = await getRemoteCacheTimestamp()
+    if (remoteTimestamp) {
+      setCacheTimestamp(PRODUCTS_COLLECTION, remoteTimestamp)
+    } else {
+      await updateRemoteCacheTimestamp()
+      setCacheTimestamp(PRODUCTS_COLLECTION, new Date().toISOString())
+    }
   }
 
   return products
@@ -1457,7 +1477,7 @@ export async function getAvailableCategories(options = {}) {
   const { viewer = null, includeUnapproved = false, viewerAccess = null } = options
   const resolvedViewerAccess = await resolveViewerAccess(viewer, viewerAccess)
   const visibleProducts = filterProductsByVisibility(
-    await getAllProductsFirestore(),
+    await getAllProductsFirestore({ adminMode: resolvedViewerAccess.isAdmin }),
     viewer,
     resolvedViewerAccess,
     {
@@ -1493,7 +1513,7 @@ export async function searchProducts(filters = {}, options = {}) {
   const max = parsedMax === null ? Number.POSITIVE_INFINITY : parsedMax
   const term = query.trim().toLowerCase()
   const visibleProducts = filterProductsByVisibility(
-    await getAllProductsFirestore(),
+    await getAllProductsFirestore({ adminMode: resolvedViewerAccess.isAdmin }),
     viewer,
     resolvedViewerAccess,
     {
@@ -1523,7 +1543,7 @@ export async function getFreeProducts(limit = 8, options = {}) {
   } = options
   const resolvedViewerAccess = await resolveViewerAccess(viewer, viewerAccess)
   const visibleProducts = filterProductsByVisibility(
-    await getAllProductsFirestore(),
+    await getAllProductsFirestore({ adminMode: resolvedViewerAccess.isAdmin }),
     viewer,
     resolvedViewerAccess,
     {
@@ -1547,7 +1567,7 @@ export async function getRecentProducts(limit = 8, options = {}) {
   } = options
   const resolvedViewerAccess = await resolveViewerAccess(viewer, viewerAccess)
   const visibleProducts = filterProductsByVisibility(
-    await getAllProductsFirestore(),
+    await getAllProductsFirestore({ adminMode: resolvedViewerAccess.isAdmin }),
     viewer,
     resolvedViewerAccess,
     {
@@ -1609,7 +1629,7 @@ export async function getSellerProducts(sellerId, options = {}) {
     viewerAccess = null,
   } = options
   const resolvedViewerAccess = await resolveViewerAccess(viewer, viewerAccess)
-  const sellerProducts = (await getAllProductsFirestore()).filter((item) => item.sellerId === sellerId)
+  const sellerProducts = (await getAllProductsFirestore({ adminMode: resolvedViewerAccess.isAdmin })).filter((item) => item.sellerId === sellerId)
 
   return sortProducts(
     filterProductsByVisibility(sellerProducts, viewer, resolvedViewerAccess, {
@@ -1631,6 +1651,8 @@ export async function createProduct(payload, user) {
   if (access.isBlacklisted) {
     throw new Error('Sua conta está bloqueada e não pode publicar anúncios.')
   }
+
+  enforceRateLimit('createProduct')
 
   const isAdminActor = access.isAdmin
   const moderationStatus = isAdminActor ? 'approved' : 'pending'
@@ -1725,6 +1747,7 @@ export async function createProduct(payload, user) {
     })
 
     await invalidateProductCache()
+    recordOperation('createProduct')
     return {
       ...documentPayload,
       id: created.id,
@@ -1764,6 +1787,7 @@ export async function createProduct(payload, user) {
   safeWrite(EXTRA_PRODUCTS_KEY, extra)
   await invalidateProductCache()
 
+  recordOperation('createProduct')
   return {
     ...newProduct,
     storageMode: isFirebaseConfigured && db ? 'local-fallback' : 'local',
@@ -1780,6 +1804,8 @@ export async function updateProduct(productId, payload, user) {
   if (access.isBlacklisted) {
     throw new Error('Sua conta está bloqueada e não pode editar anúncios.')
   }
+
+  enforceRateLimit('updateProduct')
 
   const isAdminActor = access.isAdmin
   const sellerIdentity = getPreferredUserIdentity(user)
@@ -1964,6 +1990,7 @@ export async function updateProduct(productId, payload, user) {
     await sendSystemMessageToUser(current.sellerId, SYSTEM_MESSAGES.PRODUCT_INVALIDATED(updated.title), updated)
   }
 
+  recordOperation('updateProduct')
   return updated
 }
 
@@ -1977,6 +2004,8 @@ export async function deleteProduct(productId, user) {
   if (access.isBlacklisted) {
     throw new Error('Sua conta está bloqueada e não pode excluir anúncios.')
   }
+
+  enforceRateLimit('deleteProduct')
 
   const isAdminActor = access.isAdmin
 
@@ -2036,6 +2065,8 @@ export async function deleteProduct(productId, user) {
     await ensureUniBrikConversation({ uid: current.sellerId })
     await sendSystemMessageToUser(current.sellerId, SYSTEM_MESSAGES.PRODUCT_DELETED(current.title), current)
   }
+
+  recordOperation('deleteProduct')
 }
 
 export async function getMyProfile(user) {
@@ -2066,7 +2097,7 @@ export async function getMyProducts(user) {
   }
 
   return sortProducts(
-    (await getAllProductsFirestore()).filter((item) => item.sellerId === user.uid),
+    (await getAllProductsFirestore({ ownerModeUid: user.uid })).filter((item) => item.sellerId === user.uid),
     'recent',
   )
 }
@@ -2116,7 +2147,7 @@ export async function getFavoriteProducts(user) {
 
   const favoriteIds = safeRead(buildFavoriteKey(user.uid), [])
   const access = await resolveViewerAccess(user)
-  const favoriteProducts = (await getAllProductsFirestore()).filter((item) => favoriteIds.includes(item.id))
+  const favoriteProducts = (await getAllProductsFirestore({ adminMode: access.isAdmin })).filter((item) => favoriteIds.includes(item.id))
 
   return sortProducts(
     filterProductsByVisibility(favoriteProducts, user, access, {
@@ -2349,6 +2380,8 @@ export async function reportProduct(productId, reporterUser, reason = '') {
     throw new Error('Sua conta está bloqueada e não pode reportar anúncios.')
   }
 
+  enforceRateLimit('reportProduct')
+
   const current = await getProductById(productId, {
     viewer: reporterUser,
     viewerAccess: reporterAccess,
@@ -2381,6 +2414,8 @@ export async function reportProduct(productId, reporterUser, reason = '') {
     }),
     { includeIsAdminPost: false },
   )
+
+  recordOperation('reportProduct')
 }
 
 export async function approveProductByAdmin(productId, adminUser) {
@@ -2421,7 +2456,7 @@ export async function getProductsForModeration(adminUser, options = {}) {
   await assertAdminUser(adminUser)
 
   const statusFilter = String(options.status || '').trim().toLowerCase()
-  const allProducts = await getAllProductsFirestore()
+  const allProducts = await getAllProductsFirestore({ adminMode: true })
 
   if (!statusFilter) {
     return sortProducts(allProducts, 'recent')
@@ -2731,7 +2766,7 @@ export async function getUsersForAdmin(adminUser) {
     }
   }
 
-  const allProducts = await getAllProductsFirestore()
+  const allProducts = await getAllProductsFirestore({ adminMode: true })
   const productCountBySeller = new Map()
 
   allProducts.forEach((product) => {
@@ -2825,7 +2860,7 @@ export async function deleteUserDataByAdmin(adminUser, targetUser) {
     throw new Error('Não é permitido excluir dados de outro administrador.')
   }
 
-  const userProducts = (await getAllProductsFirestore()).filter((item) => item.sellerId === targetUid)
+  const userProducts = (await getAllProductsFirestore({ adminMode: true })).filter((item) => item.sellerId === targetUid)
 
   for (const product of userProducts) {
     await deleteProduct(product.id, adminUser)

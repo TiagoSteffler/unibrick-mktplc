@@ -1,0 +1,94 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedInRaw() {
+      return request.auth != null
+        && request.auth.token.email is string;
+    }
+
+    function hasAcademicEmailDomain() {
+      return isSignedInRaw()
+        && request.auth.token.email.matches('.*@(acad\\.ufsm\\.br|inf\\.ufsm\\.br|ufsm\\.br)$');
+    }
+
+    function hasAdminClaim() {
+      return isSignedInRaw()
+        && (
+          request.auth.token.admin == true
+          || request.auth.token.role == 'admin'
+        );
+    }
+
+    function hasAdminRecordByUid() {
+      return isSignedInRaw()
+        && firestore.exists(/databases/(default)/documents/admin_users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/admin_users/$(request.auth.uid)).data.active != false;
+    }
+
+    function hasAdminRecordByEmailDocId() {
+      return isSignedInRaw()
+        && firestore.exists(/databases/(default)/documents/admin_users/$(request.auth.token.email))
+        && firestore.get(/databases/(default)/documents/admin_users/$(request.auth.token.email)).data.active != false;
+    }
+
+    function isAdmin() {
+      return isSignedInRaw()
+        && request.auth.token.email.matches('.*@gmail\\.com$')
+        && (hasAdminClaim() || hasAdminRecordByUid() || hasAdminRecordByEmailDocId());
+    }
+
+    function isBlacklisted() {
+      return isSignedInRaw()
+        && (
+          (
+            firestore.exists(/databases/(default)/documents/blacklist/$(request.auth.uid))
+            && firestore.get(/databases/(default)/documents/blacklist/$(request.auth.uid)).data.active != false
+          )
+          || (
+            firestore.exists(/databases/(default)/documents/blacklist/$(request.auth.token.email))
+            && firestore.get(/databases/(default)/documents/blacklist/$(request.auth.token.email)).data.active != false
+          )
+        );
+    }
+
+    function isSignedIn() {
+      return isSignedInRaw()
+        && !isBlacklisted()
+        && (hasAcademicEmailDomain() || isAdmin());
+    }
+
+    // Limite de 10 MB por arquivo e apenas formatos de imagem permitidos.
+    function isValidImageUpload() {
+      return request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/(png|jpeg|jpg|heic|heif|avif|webp)');
+    }
+
+    match /products/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isSignedIn()
+        && (request.auth.uid == userId || isAdmin())
+        && isValidImageUpload();
+      allow delete: if isSignedIn()
+        && (request.auth.uid == userId || isAdmin());
+    }
+
+    // Chat nao grava arquivos no Storage no fluxo atual.
+    // Nao e necessario ajuste de regra de Storage para corrigir o erro de permissoes do chat.
+
+    match /user_profiles/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn()
+        && (
+          fileName == request.auth.uid + '.jpg'
+          || isAdmin()
+        )
+        && isValidImageUpload();
+      allow delete: if isSignedIn()
+        && (
+          fileName == request.auth.uid + '.jpg'
+          || isAdmin()
+        );
+    }
+  }
+}

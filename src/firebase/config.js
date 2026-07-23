@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
 
 function normalizeStorageBucket(value) {
   const raw = String(value || '').trim()
@@ -87,6 +88,21 @@ if (isFirebaseConfigured) {
   auth = getAuth(app)
   db = getFirestore(app)
   storage = getStorage(app, `gs://${firebaseStorageBucket}`)
+
+  const recaptchaKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY
+  if (recaptchaKey) {
+    // Only in development, you can use ReCaptchaV3Provider, though in true localhost it might need a debug token.
+    // For this app, it's safer to configure self.FIREBASE_APPCHECK_DEBUG_TOKEN in dev if needed,
+    // but the basic initialization is here.
+    try {
+      initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(recaptchaKey),
+        isTokenAutoRefreshEnabled: true
+      })
+    } catch (e) {
+      console.warn("App Check failed to initialize:", e)
+    }
+  }
 }
 
 export {

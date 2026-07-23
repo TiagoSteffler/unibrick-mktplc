@@ -15,6 +15,7 @@ import {
   updateDoc
 } from 'firebase/firestore'
 import { db, isFirebaseConfigured } from '../firebase/config'
+import { enforceRateLimit, recordOperation } from './rateLimitService'
 
 const CHAT_CONVERSATIONS_KEY = 'marketplace_chat_conversations'
 const CHAT_MESSAGES_KEY = 'marketplace_chat_messages'
@@ -454,6 +455,8 @@ export async function ensureDirectConversation(currentUser, otherUser, options =
     throw new Error('Dados de conversa inválidos.')
   }
 
+  enforceRateLimit('createConversation')
+
   const topicProduct = normalizeTopicProduct(options.topicProduct)
   const baseConversation = createDirectConversationBase(currentUser, otherUser, nowIso(), topicProduct)
   const conversationId = baseConversation.id
@@ -464,6 +467,7 @@ export async function ensureDirectConversation(currentUser, otherUser, options =
 
     if (!snapshot.exists()) {
       await setDoc(reference, baseConversation)
+      recordOperation('createConversation')
       return baseConversation
     }
 
@@ -685,6 +689,8 @@ export async function sendChatMessage(user, conversation, payload) {
     throw new Error('Esta conversa é somente leitura.')
   }
 
+  enforceRateLimit('sendMessage')
+
   const text = String(payload?.text || '').trim()
   const attachment = payload?.attachment || null
 
@@ -780,6 +786,7 @@ export async function sendChatMessage(user, conversation, payload) {
       topicBuyerId: message.topicBuyerId,
     })
 
+    recordOperation('sendMessage')
     return message
   }
 
@@ -791,6 +798,7 @@ export async function sendChatMessage(user, conversation, payload) {
 
   pushMessageLocal(conversation.id, message)
 
+  recordOperation('sendMessage')
   return message
 }
 

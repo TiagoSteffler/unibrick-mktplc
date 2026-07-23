@@ -44,17 +44,7 @@ function submitHeaderSearch() {
   })
 }
 
-function goToProtected(path) {
-  if (isAuthenticated.value) {
-    router.push(path)
-    return
-  }
 
-  router.push({
-    name: 'login',
-    query: { redirect: path },
-  })
-}
 </script>
 
 <template>
@@ -134,30 +124,25 @@ function goToProtected(path) {
     </header>
 
     <nav v-if="!hideNavigationChrome" class="mobile-bottom-menu" aria-label="Navegacao mobile">
-      <a href="/chat" class="menu-item" @click.prevent="goToProtected('/chat')" aria-label="Chat">
+      <RouterLink to="/chat" class="menu-item" aria-label="Chat">
         <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H7l-4 3v-5.5A8.5 8.5 0 1 1 21 11.5z"></path>
         </svg>
-      </a>
+      </RouterLink>
 
-      <a href="/favorites" class="menu-item" @click.prevent="goToProtected('/favorites')" aria-label="Favoritos">
+      <RouterLink to="/favorites" class="menu-item" aria-label="Favoritos">
         <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 21s-6.7-4.35-9.33-7.97A5.75 5.75 0 0 1 12 5.5a5.75 5.75 0 0 1 9.33 7.53C18.7 16.65 12 21 12 21z"></path>
         </svg>
-      </a>
+      </RouterLink>
 
-      <a
-        href="/my/products"
-        class="menu-item"
-        @click.prevent="goToProtected('/my/products')"
-        aria-label="Meus anúncios"
-      >
+      <RouterLink to="/my/products" class="menu-item" aria-label="Meus anúncios">
         <svg class="menu-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M15 21v-5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5"/>
           <path d="M17.774 10.31a1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.451 0 1.12 1.12 0 0 0-1.548 0 2.5 2.5 0 0 1-3.452 0 1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.77-3.248l2.889-4.184A2 2 0 0 1 7 2h10a2 2 0 0 1 1.653.873l2.895 4.192a2.5 2.5 0 0 1-3.774 3.244"/>
           <path d="M4 10.95V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.05"/>
         </svg>
-      </a>
+      </RouterLink>
 
       <RouterLink v-if="isAdmin" to="/admin" class="menu-item" aria-label="Painel admin">
         <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

@@ -205,6 +205,7 @@ onMounted(() => {
           v-model="form.fullName"
           type="text"
           required
+          maxlength="50"
           placeholder="Nome completo"
           autocomplete="name"
         />
@@ -226,6 +227,7 @@ onMounted(() => {
           v-model="form.neighborhood"
           type="text"
           required
+          maxlength="50"
           placeholder="Ex.: Camobi"
           autocomplete="address-level3"
         />
@@ -237,6 +239,7 @@ onMounted(() => {
           v-model="form.hometown"
           type="text"
           required
+          maxlength="50"
           list="hometown-city-options"
           :disabled="isLoadingHometownOptions"
           placeholder="Digite para pesquisar (ex.: Santa Maria - RS)"
@@ -260,6 +263,7 @@ onMounted(() => {
           v-model="form.universityRole"
           type="text"
           required
+          maxlength="50"
           placeholder="Ex.: Engenharia de Software"
           autocomplete="organization-title"
         />
