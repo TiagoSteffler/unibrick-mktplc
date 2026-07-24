@@ -37,6 +37,23 @@ const CACHE_DOC = 'cache_invalidation'
 
 
 
+function safeRead(key, fallback) {
+  try {
+    const stored = localStorage.getItem(key)
+    return stored ? JSON.parse(stored) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function safeWrite(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // ignore
+  }
+}
+
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase()
 }
