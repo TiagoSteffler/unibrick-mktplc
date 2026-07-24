@@ -6,6 +6,7 @@ import { getBrazilianCities } from '../constants/brazilianCities'
 import { authState, updateAuthenticatedUserProfile } from '../services/authService'
 import { getUserProfile, saveUserProfile } from '../services/marketplaceService'
 import { optimizeMarketplaceImage } from '../utils/imageOptimizer'
+import { UI_TEXTS } from '../config/messages'
 
 const route = useRoute()
 const router = useRouter()
@@ -92,7 +93,7 @@ function removePhoto() {
 
 function handleUseGooglePhoto() {
   if (!user.value?.photoURL) {
-    error.value = 'Nenhuma foto disponível no Google.'
+    error.value = UI_TEXTS.PROFILE_NO_GOOGLE_PHOTO
     return
   }
   form.photoURL = user.value.photoURL

@@ -6,6 +6,9 @@ const showPrompt = ref(false)
 
 const handleBeforeInstallPrompt = (e) => {
   e.preventDefault()
+  if (sessionStorage.getItem('pwa-prompt-dismissed')) {
+    return
+  }
   deferredPrompt.value = e
   showPrompt.value = true
 }
@@ -25,17 +28,17 @@ const installApp = async () => {
   
   const { outcome } = await deferredPrompt.value.userChoice
   
-  if (outcome === 'accepted') {
-    console.log('User accepted the install prompt')
-  } else {
-    console.log('User dismissed the install prompt')
+  if (outcome !== 'accepted') {
+    // Optionally handle dismissal if needed in the future
   }
   
+  sessionStorage.setItem('pwa-prompt-dismissed', 'true')
   deferredPrompt.value = null
   showPrompt.value = false
 }
 
 const dismissPrompt = () => {
+  sessionStorage.setItem('pwa-prompt-dismissed', 'true')
   showPrompt.value = false
 }
 </script>

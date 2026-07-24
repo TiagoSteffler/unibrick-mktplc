@@ -5,6 +5,7 @@ import { authState, isAdminSession } from './services/authService'
 import { getUserProfile } from './services/marketplaceService'
 import appLogo from './assets/blue-logo-1-CDTEx3Yb.png'
 import InstallPrompt from './components/InstallPrompt.vue'
+import OfflineOverlay from './components/OfflineOverlay.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -49,6 +50,7 @@ function submitHeaderSearch() {
 
 <template>
   <div class="app-shell">
+    <OfflineOverlay />
     <InstallPrompt />
     <header v-if="!hideNavigationChrome" class="topbar">
       <div class="topbar-main">

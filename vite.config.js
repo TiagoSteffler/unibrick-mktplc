@@ -22,9 +22,14 @@ export default defineConfig(({ mode }) => {
           icons: [
             {
               src: 'blue_logo_app.png',
-              sizes: '512x512',
+              sizes: '192x192',
               type: 'image/png'
             },
+            {
+              src: 'blue_logo_app.png',
+              sizes: '512x512',
+              type: 'image/png'
+            }
           ]
         }
       })

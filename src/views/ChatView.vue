@@ -3,7 +3,6 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authState } from '../services/authService'
 import {
-  getMyProducts,
   getProductById,
   getSellerById,
   isUserBlacklisted,
@@ -15,7 +14,6 @@ import {
   deleteConversationIfEmpty,
   ensureDirectConversation,
   ensureUniBrikConversation,
-  getConversationMessages,
   getConversationPeer,
   getUnreadCountForUser,
   listenToUserConversations,
@@ -97,15 +95,7 @@ const hasBuyerFirstMessage = computed(() => {
 
 const hasTopicIntroMessage = computed(() => messages.value.some((message) => message.kind === 'topic-intro'))
 
-const showTopicPreviewBanner = computed(
-  () =>
-    Boolean(
-      activeTopicProduct.value &&
-        user.value?.uid &&
-        activeTopicProduct.value.buyerId === user.value.uid &&
-        !hasBuyerFirstMessage.value,
-    ),
-)
+
 
 function getUnreadCount(conversation) {
   return getUnreadCountForUser(conversation, user.value?.uid || '')
@@ -479,8 +469,8 @@ async function loadMoreMessages() {
     }
     
     messages.value = [...filteredOlder, ...messages.value]
-  } catch (err) {
-    chatError.value = 'Falha ao carregar mensagens antigas.'
+  } catch {
+    chatError.value = UI_TEXTS.CHAT_ERROR_OLD_MESSAGES
   } finally {
     isLoadingMore.value = false
   }

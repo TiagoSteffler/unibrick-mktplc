@@ -6,6 +6,7 @@ import AppModal from '../components/AppModal.vue'
 import { createProduct, getUserProfile } from '../services/marketplaceService'
 import { PRODUCT_CATEGORIES, RETRIEVAL_LOCATIONS } from '../constants/productOptions'
 import { optimizeMarketplaceImage } from '../utils/imageOptimizer'
+import { UI_TEXTS } from '../config/messages'
 
 const router = useRouter()
 const user = computed(() => authState.value)
@@ -193,14 +194,14 @@ async function submitProduct() {
   submittedModerationStatus.value = 'approved'
 
   if (photos.value.length < 1) {
-    error.value = 'Inclua pelo menos uma foto para publicar o anúncio.'
+    error.value = UI_TEXTS.PRODUCT_CREATE_MISSING_PHOTO
     return
   }
 
   const numericPrice = Number(form.price)
 
   if (!Number.isFinite(numericPrice) || numericPrice < 0 || numericPrice > 9999.99) {
-    error.value = 'O preço deve estar entre R$ 0,00 e R$ 9.999,99.'
+    error.value = UI_TEXTS.PRODUCT_INVALID_PRICE
     return
   }
 

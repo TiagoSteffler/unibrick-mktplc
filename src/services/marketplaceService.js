@@ -19,8 +19,7 @@ import { markProductConversationsAsDeleted, sendSystemMessageToUser, ensureUniBr
 import { SYSTEM_MESSAGES } from '../config/messages'
 import { enforceRateLimit, recordOperation } from './rateLimitService'
 
-const EXTRA_PRODUCTS_KEY = 'marketplace_extra_products'
-const USER_PROFILE_KEY = 'marketplace_user_profiles'
+
 const PRODUCTS_COLLECTION = 'products'
 const USER_PROFILES_COLLECTION = 'user_profiles'
 const ADMIN_USERS_COLLECTION = 'admin_users'
@@ -30,56 +29,13 @@ const HOME_MESSAGE_DOC_ID = 'home_top_message'
 const MIN_PRODUCT_PHOTOS = 1
 const MAX_PRODUCT_PHOTOS = 5
 const MAX_PRODUCT_PRICE = 9999.99
-const ACCESS_CACHE_TTL = 60 * 1000
 const ADMIN_DOMAIN = 'gmail.com'
-const BLACKLIST_USERS_KEY = 'marketplace_blacklist_users'
-const ADMIN_USERS_KEY = 'marketplace_admin_emails'
-const HOME_MESSAGE_KEY = 'marketplace_home_message'
 const METADATA_COLLECTION = 'system_metadata'
 const CACHE_DOC = 'cache_invalidation'
 
-const configuredAdminEmails = parseAdminEmails(
-  `${import.meta.env.VITE_ADMIN_EMAIL || ''},${import.meta.env.VITE_ADMIN_EMAILS || ''}`,
-)
 
-const seedSellers = {
-  'seller-1': {
-    id: 'seller-1',
-    name: 'Loja Brick Sul',
-    photoURL: '',
-    city: 'Santa Maria',
-    joinedAt: '2024-02-10',
-    about: 'Especialista em kits de montagem para iniciantes e colecionadores.',
-  },
-  'seller-2': {
-    id: 'seller-2',
-    name: 'Brick Artesanal',
-    photoURL: '',
-    city: 'Porto Alegre',
-    joinedAt: '2023-11-01',
-    about: 'Pecas raras e miniaturas para projetos criativos.',
-  },
-}
 
-const seedProducts = []
 
-function safeRead(key, fallback) {
-  const raw = localStorage.getItem(key)
-  if (!raw) {
-    return fallback
-  }
-
-  try {
-    return JSON.parse(raw)
-  } catch {
-    localStorage.removeItem(key)
-    return fallback
-  }
-}
-
-function safeWrite(key, data) {
-  localStorage.setItem(key, JSON.stringify(data))
-}
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase()
@@ -100,48 +56,9 @@ function isAdminDomainEmail(email) {
   return getEmailDomain(email) === ADMIN_DOMAIN
 }
 
-function parseAdminEmails(rawValue) {
-  const values = String(rawValue || '')
-    .split(/[;,\s]+/)
-    .map((value) => normalizeEmail(value))
-    .filter((value) => value.includes('@'))
-    .filter((value) => isAdminDomainEmail(value))
 
-  return Array.from(new Set(values))
-}
 
-function readLocalAdminEmails() {
-  const stored = safeRead(ADMIN_USERS_KEY, [])
 
-  if (!Array.isArray(stored)) {
-    return [...configuredAdminEmails]
-  }
-
-  const fromStorage = stored
-    .map((item) => {
-      if (typeof item === 'string') {
-        return normalizeEmail(item)
-      }
-
-      if (item && typeof item === 'object') {
-        return normalizeEmail(item.email)
-      }
-
-      return ''
-    })
-    .filter((email) => isAdminDomainEmail(email))
-
-  return Array.from(new Set([...configuredAdminEmails, ...fromStorage]))
-}
-
-function readLocalBlacklist() {
-  const stored = safeRead(BLACKLIST_USERS_KEY, [])
-  return Array.isArray(stored) ? stored : []
-}
-
-function saveLocalBlacklist(entries) {
-  safeWrite(BLACKLIST_USERS_KEY, entries)
-}
 
 function normalizeBlacklistEntry(entry = {}) {
   const uid = String(entry.uid || '').trim()
@@ -190,44 +107,7 @@ function clearCachedAccess(user = null) {
   invalidateCache('access', cacheKey)
 }
 
-function parseHomeMessageTemplate(rawTemplate) {
-  const raw = String(rawTemplate || '').trim()
 
-  if (!raw) {
-    return null
-  }
-
-  const titleMatch = raw.match(/\[TITULO\]\s*(.+)/i)
-  const messageMatch = raw.match(/\[MENSAGEM\]\s*([\s\S]+)/i)
-  const title = String(titleMatch?.[1] || '').trim()
-  const message = String(messageMatch?.[1] || '').trim()
-
-  if (!title && !message) {
-    return null
-  }
-
-  return {
-    title,
-    message,
-    enabled: true,
-    source: 'template',
-  }
-}
-
-function normalizeHomeMessagePayload(payload = {}) {
-  const title = String(payload.title || '').trim().slice(0, 120)
-  const message = String(payload.message || '').trim().slice(0, 1500)
-  const enabled = Boolean(payload.enabled !== false && (title || message))
-
-  return {
-    title,
-    message,
-    enabled,
-    updatedAt: String(payload.updatedAt || new Date().toISOString()),
-    updatedByUid: String(payload.updatedByUid || '').trim(),
-    updatedByEmail: normalizeEmail(payload.updatedByEmail),
-  }
-}
 
 function getCachedProduct(productId) {
   return getCachedDoc(PRODUCTS_COLLECTION, productId)
@@ -363,32 +243,7 @@ async function hasAdminClaimInCurrentSession(user) {
   }
 }
 
-function findLocalBlacklistEntry(user) {
-  const uid = String(user?.uid || '').trim()
-  const email = normalizeEmail(user?.email)
 
-  const normalizedEntries = readLocalBlacklist()
-    .map((entry) => normalizeBlacklistEntry(entry))
-    .filter(Boolean)
-
-  return (
-    normalizedEntries.find((entry) => {
-      if (!entry.active) {
-        return false
-      }
-
-      if (uid && (entry.uid === uid || entry.id === uid)) {
-        return true
-      }
-
-      if (email && (entry.email === email || entry.id === email)) {
-        return true
-      }
-
-      return false
-    }) || null
-  )
-}
 
 async function findFirestoreBlacklistEntry(user) {
   if (!isFirebaseConfigured || !db) {
@@ -512,28 +367,19 @@ export async function resolveUserAccess(user, options = {}) {
     }
   }
 
-  const localAdminEmails = readLocalAdminEmails()
   const canBeAdmin = isAdminDomainEmail(normalizedUser.email)
-  const canTrustLocalAdminList = !isFirebaseConfigured || !db
   let isAdmin = false
 
   if (canBeAdmin) {
-    isAdmin = canTrustLocalAdminList && localAdminEmails.includes(normalizedUser.email)
-
-    if (!isAdmin) {
-      isAdmin = await hasAdminDocumentInFirestore(normalizedUser)
-    }
+    isAdmin = await hasAdminDocumentInFirestore(normalizedUser)
 
     if (!isAdmin) {
       isAdmin = await hasAdminClaimInCurrentSession(normalizedUser)
     }
   }
 
-  const localBlacklistEntry = findLocalBlacklistEntry(normalizedUser)
-  const firestoreBlacklistEntry = localBlacklistEntry
-    ? null
-    : await findFirestoreBlacklistEntry(normalizedUser)
-  const blacklistEntry = localBlacklistEntry || firestoreBlacklistEntry
+  const firestoreBlacklistEntry = await findFirestoreBlacklistEntry(normalizedUser)
+  const blacklistEntry = firestoreBlacklistEntry
 
   const resolved = {
     isAdmin,
@@ -559,7 +405,7 @@ async function assertAdminUser(user) {
   const access = await resolveUserAccess(user, { force: true })
 
   if (!access.isAdmin) {
-    throw new Error('Acesso restrito ao administrador.')
+    throw new Error(UI_TEXTS.ERR_ADMIN_RESTRICTED)
   }
 
   return access
@@ -629,7 +475,7 @@ function normalizePhotoList(photos) {
 
 function validatePhotoCount(photos) {
   if (photos.length < MIN_PRODUCT_PHOTOS) {
-    throw new Error('Inclua pelo menos uma foto do produto.')
+    throw new Error(UI_TEXTS.PRODUCT_CREATE_MISSING_PHOTO)
   }
 
   if (photos.length > MAX_PRODUCT_PHOTOS) {
@@ -641,7 +487,7 @@ function validateProductPrice(price) {
   const numericPrice = Number(price)
 
   if (!Number.isFinite(numericPrice) || numericPrice < 0 || numericPrice > MAX_PRODUCT_PRICE) {
-    throw new Error('O preço deve estar entre R$ 0,00 e R$ 9.999,99.')
+    throw new Error(UI_TEXTS.PRODUCT_INVALID_PRICE)
   }
 
   return Number(numericPrice.toFixed(2))
@@ -677,7 +523,7 @@ function isStorageInfraError(error) {
 
 async function uploadPhotosToStorage(files, user) {
   if (!storage) {
-    throw new Error('Storage do Firebase não está configurado.')
+    throw new Error(UI_TEXTS.ERR_STORAGE_UNCONFIGURED)
   }
 
   const now = Date.now()
@@ -1263,7 +1109,7 @@ function withTimeout(promise, timeoutMs, timeoutMessage) {
 
 async function uploadUserProfilePhoto(photoData, userId) {
   if (!storage) {
-    throw new Error('Storage do Firebase não está configurado.')
+    throw new Error(UI_TEXTS.ERR_STORAGE_UNCONFIGURED)
   }
 
   if (!String(photoData || '').startsWith('data:')) {
@@ -1363,7 +1209,7 @@ export async function hasCompletedUserProfile(user) {
 
 export async function saveUserProfile(user, payload) {
   if (!user) {
-    throw new Error('Usuário não autenticado')
+    throw new Error(UI_TEXTS.ERR_CHAT_UNAUTHENTICATED)
   }
 
   let processedPhotoURL = String(payload.photoURL || '').trim()
@@ -1643,13 +1489,13 @@ export async function getSellerProducts(sellerId, options = {}) {
 
 export async function createProduct(payload, user) {
   if (!user) {
-    throw new Error('Usuário não autenticado')
+    throw new Error(UI_TEXTS.ERR_CHAT_UNAUTHENTICATED)
   }
 
   const access = await resolveUserAccess(user, { force: true })
 
   if (access.isBlacklisted) {
-    throw new Error('Sua conta está bloqueada e não pode publicar anúncios.')
+    throw new Error(UI_TEXTS.ERR_ACCOUNT_BLACKLISTED_PUBLISH)
   }
 
   enforceRateLimit('createProduct')
@@ -1796,13 +1642,13 @@ export async function createProduct(payload, user) {
 
 export async function updateProduct(productId, payload, user) {
   if (!user) {
-    throw new Error('Usuário não autenticado')
+    throw new Error(UI_TEXTS.ERR_CHAT_UNAUTHENTICATED)
   }
 
   const access = await resolveUserAccess(user, { force: true })
 
   if (access.isBlacklisted) {
-    throw new Error('Sua conta está bloqueada e não pode editar anúncios.')
+    throw new Error(UI_TEXTS.ERR_ACCOUNT_BLACKLISTED_EDIT)
   }
 
   enforceRateLimit('updateProduct')
@@ -1822,7 +1668,7 @@ export async function updateProduct(productId, payload, user) {
     const currentSnapshot = await getDoc(reference)
 
     if (!currentSnapshot.exists()) {
-      throw new Error('Anúncio não encontrado.')
+      throw new Error(UI_TEXTS.PRODUCT_NOT_FOUND)
     }
 
     const current = normalizeProduct({
@@ -1833,7 +1679,7 @@ export async function updateProduct(productId, payload, user) {
     const isOwner = current.sellerId === user.uid
 
     if (!isOwner) {
-      throw new Error('Você não tem permissão para editar este anúncio.')
+      throw new Error(UI_TEXTS.ERR_PRODUCT_EDIT_UNAUTHORIZED)
     }
 
     const keptPhotos = normalizePhotoList(payload.photos).filter((photo) => !isDataUrlPhoto(photo))
@@ -1929,14 +1775,14 @@ export async function updateProduct(productId, payload, user) {
   const index = extra.findIndex((item) => item.id === productId)
 
   if (index < 0) {
-    throw new Error('Somente anúncios criados por você podem ser editados.')
+    throw new Error(UI_TEXTS.ERR_PRODUCT_EDIT_OWNER_ONLY)
   }
 
   const current = normalizeProduct(extra[index])
   const isOwner = current.sellerId === user.uid
 
   if (!isOwner) {
-    throw new Error('Você não tem permissão para editar este anúncio.')
+    throw new Error(UI_TEXTS.ERR_PRODUCT_EDIT_UNAUTHORIZED)
   }
 
   if (hasFiles) {
@@ -1996,13 +1842,13 @@ export async function updateProduct(productId, payload, user) {
 
 export async function deleteProduct(productId, user) {
   if (!user) {
-    throw new Error('Usuário não autenticado')
+    throw new Error(UI_TEXTS.ERR_CHAT_UNAUTHENTICATED)
   }
 
   const access = await resolveUserAccess(user, { force: true })
 
   if (access.isBlacklisted) {
-    throw new Error('Sua conta está bloqueada e não pode excluir anúncios.')
+    throw new Error(UI_TEXTS.ERR_ACCOUNT_BLACKLISTED_DELETE)
   }
 
   enforceRateLimit('deleteProduct')
@@ -2014,7 +1860,7 @@ export async function deleteProduct(productId, user) {
     const currentSnapshot = await getDoc(reference)
 
     if (!currentSnapshot.exists()) {
-      throw new Error('Anúncio não encontrado.')
+      throw new Error(UI_TEXTS.PRODUCT_NOT_FOUND)
     }
 
     const current = normalizeProduct({
@@ -2023,7 +1869,7 @@ export async function deleteProduct(productId, user) {
     })
 
     if (current.sellerId !== user.uid && !isAdminActor) {
-      throw new Error('Você não tem permissão para excluir este anúncio.')
+      throw new Error(UI_TEXTS.ERR_PRODUCT_DELETE_UNAUTHORIZED)
     }
 
     const storagePhotos = normalizePhotoList(current.photos).filter((photo) => !isDataUrlPhoto(photo))
@@ -2046,13 +1892,13 @@ export async function deleteProduct(productId, user) {
   const index = extra.findIndex((item) => item.id === productId)
 
   if (index < 0) {
-    throw new Error('Somente anúncios criados por você podem ser excluídos.')
+    throw new Error(UI_TEXTS.ERR_PRODUCT_DELETE_OWNER_ONLY)
   }
 
   const current = normalizeProduct(extra[index])
 
   if (current.sellerId !== user.uid && !isAdminActor) {
-    throw new Error('Você não tem permissão para excluir este anúncio.')
+    throw new Error(UI_TEXTS.ERR_PRODUCT_DELETE_UNAUTHORIZED)
   }
 
   extra.splice(index, 1)
@@ -2104,7 +1950,7 @@ export async function getMyProducts(user) {
 
 export async function deleteUserMarketplaceData(user) {
   if (!user?.uid) {
-    throw new Error('Usuário não autenticado')
+    throw new Error(UI_TEXTS.ERR_CHAT_UNAUTHENTICATED)
   }
 
   const myProducts = await getMyProducts(user)
@@ -2170,7 +2016,7 @@ export async function isFavorite(user, productId) {
 
 export async function toggleFavorite(user, productId) {
   if (!user) {
-    throw new Error('Usuário não autenticado')
+    throw new Error(UI_TEXTS.ERR_CHAT_UNAUTHENTICATED)
   }
 
   const key = buildFavoriteKey(user.uid)
@@ -2213,7 +2059,7 @@ async function applyModerationUpdate(productId, updater, options = {}) {
     const snapshot = await getDoc(reference)
 
     if (!snapshot.exists()) {
-      throw new Error('Anúncio não encontrado.')
+      throw new Error(UI_TEXTS.PRODUCT_NOT_FOUND)
     }
 
     const current = normalizeProduct({ id: snapshot.id, ...snapshot.data() })
@@ -2228,7 +2074,7 @@ async function applyModerationUpdate(productId, updater, options = {}) {
   const index = extra.findIndex((item) => String(item.id || '') === String(productId || ''))
 
   if (index < 0) {
-    throw new Error('Anúncio não encontrado.')
+    throw new Error(UI_TEXTS.PRODUCT_NOT_FOUND)
   }
 
   const current = normalizeProduct(extra[index])
@@ -2371,7 +2217,7 @@ export async function clearHomeMessageByAdmin(adminUser) {
 
 export async function reportProduct(productId, reporterUser, reason = '') {
   if (!reporterUser) {
-    throw new Error('Usuário não autenticado')
+    throw new Error(UI_TEXTS.ERR_CHAT_UNAUTHENTICATED)
   }
 
   const reporterAccess = await resolveUserAccess(reporterUser, { force: true })
@@ -2389,7 +2235,7 @@ export async function reportProduct(productId, reporterUser, reason = '') {
   })
 
   if (!current) {
-    throw new Error('Anúncio não encontrado.')
+    throw new Error(UI_TEXTS.PRODUCT_NOT_FOUND)
   }
 
   if (current.sellerId === reporterUser.uid) {

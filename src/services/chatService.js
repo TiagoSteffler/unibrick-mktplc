@@ -17,29 +17,9 @@ import {
 import { db, isFirebaseConfigured } from '../firebase/config'
 import { enforceRateLimit, recordOperation } from './rateLimitService'
 
-const CHAT_CONVERSATIONS_KEY = 'marketplace_chat_conversations'
-const CHAT_MESSAGES_KEY = 'marketplace_chat_messages'
 const CONVERSATIONS_COLLECTION = 'chat_conversations'
 const UNI_BRIK_ID = 'unibrik-system'
 const UNI_BRIK_NAME = 'UniBrik'
-
-function safeRead(key, fallback) {
-  const raw = localStorage.getItem(key)
-
-  if (!raw) {
-    return fallback
-  }
-
-  try {
-    return JSON.parse(raw)
-  } catch (err) {
-    return fallback
-  }
-}
-
-function safeWrite(key, value) {
-  localStorage.setItem(key, JSON.stringify(value))
-}
 
 function nowIso() {
   return new Date().toISOString()
@@ -136,23 +116,7 @@ function createDirectConversationBase(currentUser, otherUser, createdAt = nowIso
   })
 }
 
-function readConversationsLocal() {
-  const conversations = safeRead(CHAT_CONVERSATIONS_KEY, [])
-  return Array.isArray(conversations) ? conversations.map(normalizeConversation) : []
-}
 
-function saveConversationsLocal(conversations) {
-  safeWrite(CHAT_CONVERSATIONS_KEY, conversations)
-}
-
-function readMessagesLocal() {
-  const map = safeRead(CHAT_MESSAGES_KEY, {})
-  return typeof map === 'object' && map ? map : {}
-}
-
-function saveMessagesLocal(messagesMap) {
-  safeWrite(CHAT_MESSAGES_KEY, messagesMap)
-}
 
 function sortByUpdatedAtDesc(items) {
   return [...items].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
@@ -223,36 +187,9 @@ export async function clearConversationMessages(conversation, user) {
 
   if (isFirebaseConfigured && db) {
     await updateDoc(doc(db, CONVERSATIONS_COLLECTION, conversation.id), { clearedAt })
-    return
-  }
-
-  const convs = readConversationsLocal()
-  const conv = convs.find(c => c.id === conversation.id)
-  if (conv) {
-    conv.clearedAt = clearedAt
-    saveConversationsLocal(convs)
-  }
-}
-
-function upsertConversationLocal(conversation) {
-  const conversations = readConversationsLocal()
-  const index = conversations.findIndex((item) => item.id === conversation.id)
-
-  if (index >= 0) {
-    conversations[index] = normalizeConversation(conversation)
   } else {
-    conversations.push(normalizeConversation(conversation))
+    throw new Error(UI_TEXTS.ERR_OFFLINE)
   }
-
-  saveConversationsLocal(conversations)
-}
-
-function pushMessageLocal(conversationId, message) {
-  const messagesMap = readMessagesLocal()
-  const current = Array.isArray(messagesMap[conversationId]) ? messagesMap[conversationId] : []
-
-  messagesMap[conversationId] = [...current, normalizeMessage(message)]
-  saveMessagesLocal(messagesMap)
 }
 
 export async function getUserConversations(user) {
@@ -264,8 +201,7 @@ export async function getUserConversations(user) {
     return getConversationsFirestore(user.uid)
   }
 
-  const conversations = readConversationsLocal().filter((item) => item.participants.includes(user.uid))
-  return sortByUpdatedAtDesc(conversations)
+  throw new Error(UI_TEXTS.ERR_OFFLINE)
 }
 
 export async function getConversationMessages(conversationId) {
@@ -277,9 +213,7 @@ export async function getConversationMessages(conversationId) {
     return getMessagesFirestore(conversationId)
   }
 
-  const messagesMap = readMessagesLocal()
-  const messages = Array.isArray(messagesMap[conversationId]) ? messagesMap[conversationId] : []
-  return messages.map(normalizeMessage).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+  throw new Error(UI_TEXTS.ERR_OFFLINE)
 }
 
 export function listenToUserConversations(user, callback) {
@@ -304,9 +238,7 @@ export function listenToUserConversations(user, callback) {
     })
   }
 
-  const conversations = readConversationsLocal().filter((item) => item.participants.includes(user.uid))
-  callback(sortByUpdatedAtDesc(conversations))
-  return () => {}
+  throw new Error(UI_TEXTS.ERR_OFFLINE)
 }
 
 export function listenToConversationMessages(conversation, callback) {
@@ -376,24 +308,7 @@ export function listenToConversationMessages(conversation, callback) {
     }
   }
 
-  const messagesMap = readMessagesLocal()
-  const messages = Array.isArray(messagesMap[conversationId]) ? messagesMap[conversationId] : []
-  
-  let broadcastLocal = []
-  if (isSystem) {
-    const rawBroadcasts = safeRead('unibrik_broadcasts_local', [])
-    broadcastLocal = rawBroadcasts.map((item) => normalizeMessage({
-      id: item.id,
-      conversationId,
-      senderId: UNI_BRIK_ID,
-      senderName: UNI_BRIK_NAME,
-      ...item
-    }))
-  }
-
-  const msgs = [...messages, ...broadcastLocal].map(normalizeMessage).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-  callback(msgs)
-  return () => {}
+  throw new Error(UI_TEXTS.ERR_OFFLINE)
 }
 
 export async function loadPreviousMessages(conversation, lastLoadedMessageCreatedAt) {
@@ -446,13 +361,12 @@ export async function loadPreviousMessages(conversation, lastLoadedMessageCreate
     return msgs
   }
 
-  // Fallback local mock
-  return []
+  throw new Error(UI_TEXTS.ERR_OFFLINE)
 }
 
 export async function ensureDirectConversation(currentUser, otherUser, options = {}) {
   if (!currentUser || !otherUser?.id) {
-    throw new Error('Dados de conversa inválidos.')
+    throw new Error(UI_TEXTS.ERR_CHAT_INVALID_DATA)
   }
 
   enforceRateLimit('createConversation')
@@ -487,37 +401,16 @@ export async function ensureDirectConversation(currentUser, otherUser, options =
     return existingConversation
   }
 
-  const conversations = readConversationsLocal()
-  const existingIndex = conversations.findIndex((item) => item.id === conversationId)
-
-  if (existingIndex >= 0) {
-    const existingConversation = normalizeConversation(conversations[existingIndex])
-
-    if (topicProduct && !existingConversation.topicProduct) {
-      const nextConversation = normalizeConversation({
-        ...existingConversation,
-        topicProduct,
-      })
-      conversations[existingIndex] = nextConversation
-      saveConversationsLocal(conversations)
-      return nextConversation
-    }
-
-    return existingConversation
-  }
-
-  conversations.push(baseConversation)
-  saveConversationsLocal(conversations)
-  return baseConversation
+  throw new Error(UI_TEXTS.ERR_OFFLINE)
 }
 
 export function buildDirectConversationDraft(currentUser, otherUser, options = {}) {
   if (!currentUser || !otherUser?.id) {
-    throw new Error('Dados de conversa inválidos.')
+    throw new Error(UI_TEXTS.ERR_CHAT_INVALID_DATA)
   }
 
   if (currentUser.uid === otherUser.id) {
-    throw new Error('Você não pode iniciar uma conversa consigo mesmo.')
+    throw new Error(UI_TEXTS.ERR_CHAT_SELF)
   }
 
   const topicProduct = normalizeTopicProduct(options.topicProduct)
@@ -547,20 +440,7 @@ export async function deleteConversationIfEmpty(conversationId) {
     return true
   }
 
-  const messagesMap = readMessagesLocal()
-  const existingMessages = Array.isArray(messagesMap[conversationId]) ? messagesMap[conversationId] : []
-
-  if (existingMessages.length > 0) {
-    return false
-  }
-
-  const conversations = readConversationsLocal().filter((conversation) => conversation.id !== conversationId)
-  saveConversationsLocal(conversations)
-
-  delete messagesMap[conversationId]
-  saveMessagesLocal(messagesMap)
-
-  return true
+  throw new Error(UI_TEXTS.ERR_OFFLINE)
 }
 
 export async function sendSystemBroadcast(adminUser, text) {
@@ -576,12 +456,9 @@ export async function sendSystemBroadcast(adminUser, text) {
 
   if (isFirebaseConfigured && db) {
     await addDoc(collection(db, 'unibrik_broadcasts'), payload)
-    return
+  } else {
+    throw new Error(UI_TEXTS.ERR_OFFLINE)
   }
-
-  const broadcasts = safeRead('unibrik_broadcasts_local', [])
-  broadcasts.push({ id: `broadcast-${Date.now()}`, ...payload })
-  safeWrite('unibrik_broadcasts_local', broadcasts)
 }
 
 export async function sendSystemMessageToUser(targetUserId, text, topicProduct = null) {
@@ -610,13 +487,9 @@ export async function sendSystemMessageToUser(targetUserId, text, topicProduct =
       lastMessagePreview: text.substring(0, 50),
       updatedAt: nowIso()
     }, { merge: true })
-    return
+  } else {
+    throw new Error(UI_TEXTS.ERR_OFFLINE)
   }
-
-  const messagesMap = readMessagesLocal()
-  if (!messagesMap[conversationId]) messagesMap[conversationId] = []
-  messagesMap[conversationId].push({ id: `sys-${Date.now()}`, ...payload })
-  saveMessagesLocal(messagesMap)
 }
 
 export async function ensureUniBrikConversation(user) {
@@ -663,30 +536,20 @@ export async function ensureUniBrikConversation(user) {
     })
   }
 
-  const conversations = readConversationsLocal()
-  const existing = conversations.find((item) => item.id === conversationId)
-
-  if (!existing) {
-    conversations.push(baseConversation)
-    saveConversationsLocal(conversations)
-
-    return baseConversation
-  }
-
-  return normalizeConversation(existing)
+  throw new Error(UI_TEXTS.ERR_OFFLINE)
 }
 
 export async function sendChatMessage(user, conversation, payload) {
   if (!user) {
-    throw new Error('Usuário não autenticado.')
+    throw new Error(UI_TEXTS.ERR_CHAT_UNAUTHENTICATED)
   }
 
   if (!conversation?.id) {
-    throw new Error('Conversa inválida.')
+    throw new Error(UI_TEXTS.ERR_CHAT_INVALID_CONVERSATION)
   }
 
   if (conversation.readOnly) {
-    throw new Error('Esta conversa é somente leitura.')
+    throw new Error(UI_TEXTS.ERR_CHAT_READ_ONLY)
   }
 
   enforceRateLimit('sendMessage')
@@ -695,7 +558,7 @@ export async function sendChatMessage(user, conversation, payload) {
   const attachment = payload?.attachment || null
 
   if (!text && !attachment) {
-    throw new Error('Digite uma mensagem para enviar.')
+    throw new Error(UI_TEXTS.ERR_CHAT_EMPTY_MESSAGE)
   }
 
   const createdAt = nowIso()
@@ -790,16 +653,7 @@ export async function sendChatMessage(user, conversation, payload) {
     return message
   }
 
-  upsertConversationLocal(updatedConversation)
-
-  if (topicMessage) {
-    pushMessageLocal(conversation.id, topicMessage)
-  }
-
-  pushMessageLocal(conversation.id, message)
-
-  recordOperation('sendMessage')
-  return message
+  throw new Error(UI_TEXTS.ERR_OFFLINE)
 }
 
 export function getConversationPeer(conversation, currentUserId) {
@@ -864,10 +718,9 @@ export async function markConversationAsRead(user, conversation) {
   if (isFirebaseConfigured && db) {
     const conversationRef = doc(db, CONVERSATIONS_COLLECTION, conversation.id)
     await setDoc(conversationRef, { unreadCounts: nextConversation.unreadCounts }, { merge: true })
-    return
+  } else {
+    throw new Error(UI_TEXTS.ERR_OFFLINE)
   }
-
-  upsertConversationLocal(nextConversation)
 }
 
 export async function deleteUserChatData(user) {
@@ -881,31 +734,9 @@ export async function deleteUserChatData(user) {
     for (const conversation of conversations) {
       await cleanupConversationForUserFirestore(user.uid, conversation)
     }
-
-    return
+  } else {
+    throw new Error(UI_TEXTS.ERR_OFFLINE)
   }
-
-  const conversations = readConversationsLocal()
-  const removedConversationIds = conversations
-    .filter((conversation) => (conversation.participants || []).includes(user.uid))
-    .map((conversation) => conversation.id)
-
-  if (!removedConversationIds.length) {
-    return
-  }
-
-  const nextConversations = conversations.filter(
-    (conversation) => !(conversation.participants || []).includes(user.uid),
-  )
-  saveConversationsLocal(nextConversations)
-
-  const messagesMap = readMessagesLocal()
-
-  removedConversationIds.forEach((conversationId) => {
-    delete messagesMap[conversationId]
-  })
-
-  saveMessagesLocal(messagesMap)
 }
 
 export async function markProductConversationsAsDeleted(productId) {
@@ -922,26 +753,7 @@ export async function markProductConversationsAsDeleted(productId) {
     } catch (e) {
       console.warn('Falha ao atualizar conversas do produto apagado', e)
     }
-    return
-  }
-
-  const conversations = readConversationsLocal()
-  let changed = false
-  const updated = conversations.map(conv => {
-    if (conv.topicProduct && conv.topicProduct.productId === String(productId)) {
-      changed = true
-      return {
-        ...conv,
-        topicProduct: {
-          ...conv.topicProduct,
-          deleted: true
-        }
-      }
-    }
-    return conv
-  })
-
-  if (changed) {
-    saveConversationsLocal(updated)
+  } else {
+    throw new Error(UI_TEXTS.ERR_OFFLINE)
   }
 }

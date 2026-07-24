@@ -1,11 +1,9 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import ProductCard from '../components/ProductCard.vue'
 import { authState } from '../services/authService'
 import { getFavoriteProducts } from '../services/marketplaceService'
 
-const router = useRouter()
 const user = computed(() => authState.value)
 const favorites = ref([])
 const isLoading = ref(false)
@@ -18,10 +16,6 @@ async function loadFavorites() {
   } finally {
     isLoading.value = false
   }
-}
-
-function goToProducts() {
-  router.push('/search')
 }
 
 onMounted(() => {

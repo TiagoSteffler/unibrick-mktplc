@@ -43,7 +43,7 @@ watch(currentUser, () => {
     <article v-if="hasVisibleMessage" class="card home-message-modal">
       <div class="home-message-head">
         <div class="home-message-content">
-                    <div style="display:grid; gap: 10px; grid-template-columns: auto 48px; align-items: center; justify-content: space-between;">
+            <div style="display:grid; gap: 10px; grid-template-columns: auto 48px; align-items: center; justify-content: space-between;">
 
           <p class="home-message-chip">Mensagem da administração</p>
                       <button type="button" class="btn secondary home-message-close" @click="closeMessageBanner">

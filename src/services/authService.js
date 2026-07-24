@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth'
 import { auth, isFirebaseConfigured } from '../firebase/config'
 import { clearUserAccessCache, resolveUserAccess } from './marketplaceService'
+import { UI_TEXTS } from '../config/messages'
 
 const MOCK_USER_KEY = 'marketplace_mock_user'
 const DOMAIN_PLACEHOLDER = 'example.edu'
@@ -403,7 +404,7 @@ export async function deleteAuthenticatedUser() {
     const currentUser = auth.currentUser
 
     if (!currentUser) {
-      throw new Error('Não foi possível validar a sessão para excluir a conta.')
+      throw new Error(UI_TEXTS.ERR_AUTH_VALIDATION_DELETE)
     }
 
     try {

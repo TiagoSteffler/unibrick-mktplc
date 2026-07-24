@@ -12,23 +12,6 @@ const isDeleting = ref(false)
 const showDeleteModal = ref(false)
 const productIdToDelete = ref('')
 
-function getModerationStatusLabel(product) {
-  const status = String(product?.moderationStatus || 'approved').toLowerCase()
-
-  if (status === 'pending') {
-    return 'Aguardando aprovação'
-  }
-
-  if (status === 'reported') {
-    return 'Reportado para revisão'
-  }
-
-  if (status === 'rejected') {
-    return 'Rejeitado pela administração'
-  }
-
-  return 'Publicado'
-}
 
 async function loadMyProducts() {
   isLoading.value = true

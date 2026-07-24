@@ -7,13 +7,14 @@ import {
   signOutUser,
 } from '../services/authService'
 import { resolveUserAccess } from '../services/marketplaceService'
+import { UI_TEXTS } from '../config/messages'
 
 const router = useRouter()
 const user = computed(() => authState.value)
-const banReason = ref('Não informado')
+const banReason = ref(UI_TEXTS.MODERATION_REASON_UNKNOWN)
 
 const fullMessage = computed(() => {
-  const reason = String(banReason.value || '').trim() || 'Não informado'
+  const reason = String(banReason.value || '').trim() || UI_TEXTS.MODERATION_REASON_UNKNOWN
 
   return `Esta conta foi suspensa pela administração por infringir as políticas e diretrizes da plataforma. O motivo de banimento é: ${reason}. Entre em contato com a administração para recorrer da decisão pelo email: unibrikmarketplace@gmail.com.`
 })
@@ -32,15 +33,15 @@ async function loadBanReason() {
   }
 
   if (!user.value) {
-    banReason.value = 'Não informado'
+    banReason.value = UI_TEXTS.MODERATION_REASON_UNKNOWN
     return
   }
 
   try {
     const access = await resolveUserAccess(user.value, { force: true })
-    banReason.value = String(access?.blacklistEntry?.reason || '').trim() || 'Não informado'
+    banReason.value = String(access?.blacklistEntry?.reason || '').trim() || UI_TEXTS.MODERATION_REASON_UNKNOWN
   } catch {
-    banReason.value = 'Não informado'
+    banReason.value = UI_TEXTS.MODERATION_REASON_UNKNOWN
   }
 }
 

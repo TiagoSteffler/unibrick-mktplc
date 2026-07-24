@@ -226,7 +226,7 @@ function deleteListing(productId) {
 
 function banUser(targetUser) {
   if (!targetUser?.uid && !targetUser?.email) {
-    statusError.value = 'Usuário inválido para blacklist.'
+    statusError.value = UI_TEXTS.ADMIN_INVALID_USER_BLACKLIST
     return
   }
 
@@ -255,7 +255,7 @@ function unbanUser(targetUser) {
 
 function deleteUserData(targetUser) {
   if (!targetUser?.uid) {
-    statusError.value = 'UID obrigatório para excluir dados de usuário.'
+    statusError.value = UI_TEXTS.ADMIN_MISSING_UID_DELETE
     return
   }
 

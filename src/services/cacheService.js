@@ -21,7 +21,7 @@ export function getCachedCollection(collectionName) {
       cacheState.collections[collectionName] = parsed
       return parsed
     }
-  } catch (err) {
+  } catch {
     // Falha silenciosa
   }
 
@@ -32,7 +32,7 @@ export function setCachedCollection(collectionName, data) {
   cacheState.collections[collectionName] = data
   try {
     sessionStorage.setItem(`${CACHE_PREFIX}${collectionName}`, JSON.stringify(data))
-  } catch (err) {
+  } catch {
     // Falha silenciosa se exceder o limite do storage
   }
 }
@@ -50,7 +50,7 @@ export function getCachedDoc(collectionName, docId) {
       cacheState.docs[key] = parsed
       return parsed
     }
-  } catch (err) {
+  } catch {
     // Falha silenciosa
   }
 
@@ -63,7 +63,7 @@ export function setCachedDoc(collectionName, docId, data) {
   
   try {
     sessionStorage.setItem(`${CACHE_PREFIX}${key}`, JSON.stringify(data))
-  } catch (err) {
+  } catch {
     // Falha silenciosa
   }
 }
@@ -84,7 +84,7 @@ export function getCacheTimestamp(collectionName) {
   try {
     const cached = sessionStorage.getItem(`${CACHE_PREFIX}${collectionName}_timestamp`)
     return cached || null
-  } catch (err) {
+  } catch {
     return null
   }
 }
@@ -92,7 +92,7 @@ export function getCacheTimestamp(collectionName) {
 export function setCacheTimestamp(collectionName, timestamp) {
   try {
     sessionStorage.setItem(`${CACHE_PREFIX}${collectionName}_timestamp`, timestamp)
-  } catch (err) {
+  } catch {
     // Falha silenciosa
   }
 }

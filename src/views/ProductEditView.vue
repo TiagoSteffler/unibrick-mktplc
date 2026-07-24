@@ -1,11 +1,12 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { authState, isAdminSession } from '../services/authService'
+import { authState } from '../services/authService'
 import AppModal from '../components/AppModal.vue'
 import { deleteProduct, getProductById, getUserProfile, updateProduct } from '../services/marketplaceService'
 import { PRODUCT_CATEGORIES, RETRIEVAL_LOCATIONS } from '../constants/productOptions'
 import { optimizeMarketplaceImage } from '../utils/imageOptimizer'
+import { UI_TEXTS } from '../config/messages'
 
 const route = useRoute()
 const router = useRouter()
@@ -102,7 +103,7 @@ async function loadProduct() {
     const product = await getProductById(route.params.id, { viewer: user.value })
 
     if (!product) {
-      error.value = 'Anúncio não encontrado.'
+      error.value = UI_TEXTS.PRODUCT_NOT_FOUND
       loading.value = false
       return
     }
@@ -130,8 +131,8 @@ async function loadProduct() {
     existingPhotoUrls.value = Array.isArray(product.photos) ? [...product.photos] : []
     previewPhotos.value = [...existingPhotoUrls.value]
     
-  } catch (err) {
-    error.value = 'Erro ao carregar produto.'
+  } catch {
+    error.value = UI_TEXTS.PRODUCT_LOAD_ERROR
   } finally {
     loading.value = false
   }
@@ -219,14 +220,14 @@ async function submitEdit() {
   error.value = ''
 
   if (previewPhotos.value.length < 1) {
-    error.value = 'Inclua pelo menos uma foto para manter o anúncio ativo.'
+    error.value = UI_TEXTS.PRODUCT_EDIT_MISSING_PHOTO
     return
   }
 
   const numericPrice = Number(form.price)
 
   if (!Number.isFinite(numericPrice) || numericPrice < 0 || numericPrice > 9999.99) {
-    error.value = 'O preço deve estar entre R$ 0,00 e R$ 9.999,99.'
+    error.value = UI_TEXTS.PRODUCT_INVALID_PRICE
     return
   }
 

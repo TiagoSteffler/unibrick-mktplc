@@ -8,7 +8,7 @@ import appLogo from '../assets/blue-logo-1-CDTEx3Yb.png'
       <h1>Sobre o site</h1>
       <img :src="appLogo" alt="UniBrik" class="brand-logo" style="height: 20vh; align-self: center;" />
 
-      <p>O <strong>UniBrik</strong> surgiu com o propósito de oferecer uma ferramenta de utilidade para a comunidade acadêmica. Atualmente, não há um canal exclusivo para que a comunidade acadêmica possam procurar e publicar produtos e/ou serviços que sejam de interesse geral - existe os grupos de WhatsApp, Facebook e outros perfis sociais, mas que nem sempre são apropriados, né?</p>
+      <p>O <strong>UniBrik</strong> surgiu com o propósito de oferecer uma ferramenta de utilidade para a comunidade acadêmica. Atualmente, não há um canal exclusivo para que a comunidade acadêmica possam procurar e publicar produtos e/ou serviços que sejam de interesse geral - existe os grupos de WhatsApp, Facebook e outros perfis sociais, mas que nem sempre são apropriados para isso...</p>
       <p>Ele foi inicialmente idealizado em 2025, porém passou por uma completa reformulação para se tornar um web app disponível em todas as plataformas - basta ter um navegador e internet! Poste aqui o que você gostaria de vender, doar, trocar ou até mesmo dividir com outras pessoas da nossa universidade - respeitando sempre as diretrizes da plataforma.</p>
       <p>O site atualmente possui um moderador que validará os produtos anunciados na plataforma, de forma a garantir que cumpra as diretrizes abaixo.</p>
 
@@ -19,7 +19,7 @@ import appLogo from '../assets/blue-logo-1-CDTEx3Yb.png'
       
       <div class="guidelines-accordion">
         <details>
-          <summary>1. Condições de Acesso e Privacidade de Dados</summary>
+          <summary style="gap: 18px;">1. Condições de Acesso e Privacidade de Dados</summary>
           <div class="details-content">
             <ul>
               <li><strong>Acesso Exclusivo:</strong> A utilização da plataforma é restrita à comunidade acadêmica da UFSM. O acesso é liberado unicamente por meio da autenticação via Google (Google Login), sendo estritamente obrigatório o uso de e-mails institucionais com os domínios @acad.ufsm.br, @inf.ufsm.br e @ufsm.br.</li>
@@ -30,7 +30,7 @@ import appLogo from '../assets/blue-logo-1-CDTEx3Yb.png'
         </details>
 
         <details>
-          <summary>2. Diretrizes de Publicação e Produtos Anunciados</summary>
+          <summary style="gap: 18px;">2. Diretrizes de Publicação e Produtos Anunciados</summary>
           <div class="details-content">
             <p style="margin-bottom: 12px; margin-top: 0;">Para garantir um ambiente seguro e organizado, é terminantemente proibido anunciar, postar ou solicitar:</p>
             <ul>
@@ -44,7 +44,7 @@ import appLogo from '../assets/blue-logo-1-CDTEx3Yb.png'
         </details>
 
         <details>
-          <summary>3. Regras de Conduta no Chat</summary>
+          <summary style="gap: 18px;">3. Regras de Conduta no Chat</summary>
           <div class="details-content">
             <ul>
               <li><strong>Finalidade Exclusiva:</strong> O serviço de mensagens internas (chat) destina-se unicamente a facilitar a conexão entre as partes, permitindo o esclarecimento de dúvidas sobre o produto ou serviço e a combinação da entrega.</li>
@@ -55,7 +55,7 @@ import appLogo from '../assets/blue-logo-1-CDTEx3Yb.png'
         </details>
 
         <details>
-          <summary>4. Limitação de Responsabilidade e Moderação</summary>
+          <summary style="gap: 18px;">4. Limitação de Responsabilidade e Moderação</summary>
           <div class="details-content">
             <ul>
               <li><strong>Papel da Plataforma:</strong> O Marketplace Universitário atua como um mero facilitador de contato. A plataforma não atua como intermediária, não retém valores, não realiza transações financeiras e não garante o estado de conservação, a procedência ou a veracidade dos produtos anunciados.</li>

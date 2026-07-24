@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { authState, isAdminSession } from '../services/authService'
 import { approveProductByAdmin, getProductById, isFavorite, rejectProductByAdmin, reportProduct, toggleFavorite, deleteProduct } from '../services/marketplaceService'
 import { UI_TEXTS } from '../config/messages'
+import { REPORT_OPTIONS } from '../constants/reportOptions'
 
 const route = useRoute()
 const router = useRouter()
@@ -27,13 +28,6 @@ const reportSuccessMessage = ref('')
 const showRejectedByAdminModal = ref(false)
 const dismissedRejectedByAdminModal = ref(false)
 
-const reportOptions = [
-  'Golpe',
-  'Venda de itens ilícitos',
-  'Violência, ódio, exploração',
-  'Bullying ou assédio',
-  'Nudez ou atividade sexual',
-]
 
 const mainPhotoStyle = computed(() => ({
   transform: `scale(${zoomLevel.value})`,
@@ -106,7 +100,7 @@ const moderationStatusLabel = computed(() => {
   }
 
   if (product.value.moderationStatus === 'reported') {
-    return 'Anúncio reportado para revisão'
+    return UI_TEXTS.MODERATION_STATUS_REPORTED
   }
 
   if (product.value.moderationStatus === 'rejected') {
@@ -322,12 +316,11 @@ async function submitReport() {
   try {
     await reportProduct(product.value.id, user.value, selectedReason)
     closeReportModal({ force: true })
-    reportSuccessMessage.value =
-      `Obrigado pela denúncia. Ela será repassada a administração para devidas providências, se aplicável.\nMotivo: ${selectedReason}`
+    reportSuccessMessage.value = `${UI_TEXTS.REPORT_SUCCESS}\nMotivo: ${selectedReason}`
     showReportSuccessModal.value = true
     await loadProduct()
   } catch (err) {
-    reportErrorMessage.value = err instanceof Error ? err.message : 'Falha ao reportar anúncio.'
+    reportErrorMessage.value = err instanceof Error ? err.message : UI_TEXTS.REPORT_FAIL
   } finally {
     isReporting.value = false
   }
@@ -373,7 +366,7 @@ async function approveReportedProduct() {
     await approveProductByAdmin(product.value.id, user.value)
     await loadProduct()
   } catch (err) {
-    reportErrorMessage.value = err instanceof Error ? err.message : 'Falha ao aprovar anúncio.'
+    reportErrorMessage.value = err instanceof Error ? err.message : UI_TEXTS.REPORT_APPROVE_FAIL
   } finally {
     adminActionInProgress.value = false
   }
@@ -396,7 +389,7 @@ async function rejectReportedProduct() {
     await rejectProductByAdmin(product.value.id, user.value, reason)
     await loadProduct()
   } catch (err) {
-    reportErrorMessage.value = err instanceof Error ? err.message : 'Falha ao invalidar anúncio.'
+    reportErrorMessage.value = err instanceof Error ? err.message : UI_TEXTS.REPORT_REJECT_FAIL
   } finally {
     adminActionInProgress.value = false
   }
@@ -417,7 +410,7 @@ async function deleteReportedProduct() {
     await deleteProduct(product.value.id, user.value)
     router.push({ name: 'home' })
   } catch (err) {
-    reportErrorMessage.value = err instanceof Error ? err.message : 'Falha ao excluir anúncio.'
+    reportErrorMessage.value = err instanceof Error ? err.message : UI_TEXTS.REPORT_DELETE_FAIL
     adminActionInProgress.value = false
   }
 }
@@ -719,7 +712,7 @@ watch(
         <div class="report-modal-content">
           <p class="report-modal-message">Selecione um motivo para a denúncia:</p>
 
-          <label v-for="option in reportOptions" :key="option" class="report-option-row">
+          <label v-for="option in REPORT_OPTIONS" :key="option" class="report-option-row">
             <span>{{ option }}</span>
             <input
               v-model="selectedReportReason"
